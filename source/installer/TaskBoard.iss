@@ -46,7 +46,7 @@ Type: dirifempty; Name: "{app}"
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usPostUninstall then
+  if (CurUninstallStep = usPostUninstall) and (not UninstallSilent) then
     if DirExists(ExpandConstant('{app}\Data')) then
       MsgBox('Task data in the Data folder has been preserved.', mbInformation, MB_OK);
 end;

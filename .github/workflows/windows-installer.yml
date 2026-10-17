@@ -49,13 +49,16 @@ jobs:
           $install = Join-Path $env:RUNNER_TEMP 'TaskBoard-install-test'
           $installer = Start-Process -FilePath 'dist\Setup_TaskBoard_2.0.0.exe' -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"") -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw 'Installer failed' }
-          .build-venv\Scripts\python.exe scripts\smoke-packaged.py "$install\TaskBoard.exe"
+          .build-venv\Scripts\python.exe scripts\smoke-packaged.py "$install\TaskBoard.exe" "$install\Data"
           if ($LASTEXITCODE -ne 0) { throw 'Installed application smoke test failed' }
-          New-Item -ItemType Directory -Path "$install\Data" -Force | Out-Null
-          Set-Content "$install\Data\preserve.txt" 'keep'
+          $before = @{}
+          Get-ChildItem "$install\Data" -File -Recurse | ForEach-Object { $before[$_.FullName] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
           $uninstall = Start-Process -FilePath "$install\unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw 'Uninstall failed' }
-          if (-not (Test-Path "$install\Data\preserve.txt")) { throw 'Uninstall removed user data' }
+          foreach ($path in $before.Keys) {
+            if (-not (Test-Path $path)) { throw 'Uninstall removed user data' }
+            if ((Get-FileHash $path -Algorithm SHA256).Hash -ne $before[$path]) { throw 'Uninstall changed user data' }
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
