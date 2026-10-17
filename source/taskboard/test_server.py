@@ -95,6 +95,8 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.request('/api/login',{'password':'password123'})[0],401)
         self.assertEqual(self.request('/api/login',{'password':'newpass123'})[0],200)
         status,body,headers=self.request('/');self.assertEqual(status,200);self.assertIn("frame-ancestors 'none'",headers['Content-Security-Policy'])
+        self.assertTrue(self.request('/app.js')[2]['Content-Type'].startswith('text/javascript'))
+        self.assertTrue(self.request('/style.css')[2]['Content-Type'].startswith('text/css'))
 
     def test_attachment_remove_and_read_only_health_report(self):
         self.login()

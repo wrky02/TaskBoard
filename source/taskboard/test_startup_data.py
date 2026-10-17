@@ -101,6 +101,17 @@ class StartupDataTests(unittest.TestCase):
         self.assertEqual(store.task(db, tid)['title'], '不能丢失')
         db.close()
 
+    def test_single_instance_lock_contention_is_clean_and_recoverable(self):
+        from launcher import InstanceLock
+        first, second = InstanceLock(self.root), InstanceLock(self.root)
+        try:
+            self.assertTrue(first.acquire())
+            self.assertFalse(second.acquire())
+            first.close()
+            self.assertTrue(second.acquire())
+        finally:
+            first.close(); second.close()
+
 
 if __name__ == '__main__':
     unittest.main()
