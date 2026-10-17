@@ -86,9 +86,10 @@ internal sealed partial class BoardWindow : Window
         sidebar.Children.Add(Ui.Button("锁定工作区",async()=>{await rpc.Call("lock");await Login();},"lock"));
         sidebar.Children.Add(Ui.Text("常用视图",12,Brushes.LightSteelBlue));
         foreach(var v in State.A("views")){var view=v!.Copy();sidebar.Children.Add(Ui.Button(view.S("name"),()=>ApplyView(view)));}
+        foreach(var button in sidebar.Children.OfType<Button>()){button.Background=Brushes.Transparent;button.Foreground=Brushes.White;button.BorderThickness=new Thickness(0);button.HorizontalContentAlignment=HorizontalAlignment.Left;button.Margin=new Thickness(0,4,0,4);}
         layout=new DockPanel();var rail=new Border{Width=215,Background=new SolidColorBrush(Color.FromRgb(27,36,55)),Child=Ui.Scroll(sidebar)};DockPanel.SetDock(rail,Dock.Left);layout.Children.Add(rail);
         var main=new DockPanel{Margin=new Thickness(25,18,16,12)};
-        var heading=Ui.Text(State["names"].S("system_name","任务看板系统"),26);var headingRow=Ui.Row(heading,Ui.Text("   "+State["names"].S("user_name","我的工作区"),14,Ui.Muted));
+        var heading=Ui.Text(string.IsNullOrWhiteSpace(State["names"].S("system_name"))?"我的工作空间":State["names"].S("system_name"),26);var headingRow=Ui.Row(heading,Ui.Text("   "+State["names"].S("user_name","我的工作区"),14,Ui.Muted));
         search=Ui.Input("","search");search.Width=220;search.ToolTip="搜索任务标题和正文";
         priority=Ui.Combo(new[]{"全部优先级","紧急","高","普通","低"});stage=Ui.Combo(new[]{"全部状态","计划中","进行中","完成"});
         dueFilter=Ui.Combo(new[]{"全部日期","今天到期","已逾期","本周到期","无截止日期"});sort=Ui.Combo(new[]{"手动排序","优先级排序","截止日期排序","最近更新"});

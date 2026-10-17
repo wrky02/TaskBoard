@@ -45,10 +45,14 @@ def db_scalar(sql):
 def mainwindow():return Desktop(backend='uia').window(process=process.pid,title_re='任务看板系统.*',control_type='Window')
 def control(win,id):
     result=win.child_window(auto_id=id);result.wait('visible enabled',timeout=30);return result.wrapper_object()
-def click(win,id):control(win,id).click_input()
+def click(win,id):control(win,id).invoke()
 def text(win,id,value):control(win,id).set_edit_text(value)
 def dialog(title):
-    win=Desktop(backend='uia').window(process=process.pid,title=title,control_type='Window');win.wait('visible',timeout=30);return win
+    # WPF owned windows appear beneath their owner in the UIA tree on
+    # some Windows builds. Win32 HWND enumeration still finds the actual dialog.
+    native=Desktop(backend='win32').window(process=process.pid,title=title)
+    native.wait('visible',timeout=30)
+    return Desktop(backend='uia').window(handle=native.handle)
 
 try:
     process=subprocess.Popen([str(exe),'--data-root',str(root)])
@@ -63,7 +67,7 @@ try:
     until(lambda:db_scalar("SELECT COUNT(*) FROM tags WHERE name='NativeTag'")==1);tags.close()
     click(win,'newTask');edit=dialog('新建任务');text(edit,'editorTitle','Recovered native draft');text(edit,'editorNote','Native text without browser')
     click(edit,'closeEditor');until(lambda:db_scalar('SELECT COUNT(*) FROM drafts')==1)
-    click(win,'drafts');drafts=dialog('草稿恢复');drafts.child_window(title='恢复编辑',control_type='Button').click_input()
+    click(win,'drafts');drafts=dialog('草稿恢复');drafts.child_window(title='恢复编辑',control_type='Button').invoke()
     edit=dialog('新建任务');assert control(edit,'editorTitle').window_text()=='Recovered native draft'
     control(edit,'editorPriority').select('紧急');text(edit,'checkInput','Verify native controls');click(edit,'addCheck');click(edit,'saveTask')
     until(lambda:db_scalar('SELECT COUNT(*) FROM tasks')==2);assert db_scalar('SELECT COUNT(*) FROM drafts')==0
@@ -86,12 +90,19 @@ try:
 except Exception:
     traceback.print_exc()
     try:
-        desktop=Desktop(backend='uia');desktop.window(process=process.pid,active_only=True).capture_as_image().save(artifacts/'native-failure.png')
+        native=Desktop(backend='win32')
+        windows=native.windows(process=process.pid)
+        for index,w in enumerate(windows):
+            print('::notice title=Native visible window::'+repr((w.window_text(),w.class_name(),w.rectangle())))
+            if w.is_visible():w.capture_as_image().save(artifacts/f'native-failure-{index}.png')
         with (artifacts/'native-controls.txt').open('w',encoding='utf-8') as output:
-            for w in desktop.windows(process=process.pid):
-                output.write(w.window_text()+'\n')
-                for c in w.descendants():output.write(repr((c.element_info.control_type,c.element_info.automation_id,c.window_text()))+'\n')
-    except Exception:pass
+            for w in windows:
+                target=Desktop(backend='uia').window(handle=w.handle)
+                for c in target.descendants():
+                    entry=repr((c.element_info.control_type,c.element_info.automation_id,c.window_text()))
+                    output.write(entry+'\n')
+                    if c.element_info.control_type in ('Window','Text'):print('::notice title=Native control::'+entry[:500])
+    except Exception as debug_error:print('Diagnostic failure:',type(debug_error).__name__)
     raise
 finally:
     stop.set()
