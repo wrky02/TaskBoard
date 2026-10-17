@@ -76,7 +76,7 @@ GitHub Actions 的 `Windows installer` 工作流可手动运行；推送到 `bui
 
 2.0.0 基线已发布：[安装器与说明](https://github.com/wrky02/TaskBoard/releases/tag/v2.0.0)。
 
-2.0.1 改进窗口图标、标签回车确认和中文日期选择器，详见 [版本说明与可选设计](docs/releases/2.0.1.md)。当前构建产物名为 `TaskBoard-Windows-2.0.1`。
+2.0.1 改进窗口图标、标签回车确认和中文日期选择器，详见 [版本说明与可选设计](docs/releases/2.0.1.md)。[Windows 构建已通过](https://github.com/wrky02/TaskBoard/actions/runs/39017729326)，登录 GitHub 后下载 Artifacts 中的 `TaskBoard-Windows-2.0.1`，解压运行 `Setup_TaskBoard_2.0.1.exe`。
 
 以下为 2.0.0 基线的验证记录：
 

@@ -1,4 +1,15 @@
-# 2.0 开发验证
+# 2.0 / 2.0.1 开发验证
+
+## 2.0.1 追加验证
+
+- 先发布 [2.0.0 基线](https://github.com/wrky02/TaskBoard/releases/tag/v2.0.0)，再开始修复；发布安装器下载后 SHA256 与发布校验文件一致。
+- Linux：原有 15 项 unittest、数据层脚本、完整浏览器流程及冻结 EXE 冒烟均通过。
+- 新增浏览器覆盖：登录前图标内容与源 ICO 一致；标签 Enter 确认、必填校验、中文组合期间不提交、Escape 和取消不保存；截止日期快捷选择、清除、闰年二月、跨月方向键、PageUp、取消草稿与保存回读；390px 月历无横向溢出。
+- Windows [完整构建成功](https://github.com/wrky02/TaskBoard/actions/runs/39017729326)，提交 `aef181c`。实际 Edge 应用窗口的大小图标已与源 ICO（包含 Edge 使用的小图标放大路径）比对；冻结程序静态资源、真实安装与卸载数据保留检查通过。
+- 安装产物：`TaskBoard-Windows-2.0.1`（20.2 MB），内含 `Setup_TaskBoard_2.0.1.exe`。详见 [版本说明](releases/2.0.1.md)。
+- 自动化中文组合事件不等于实机输入法候选窗口验收；用户已固定快捷方式的图标缓存与任务栏分组仍需在实际桌面确认。
+
+## 2.0 基线记录
 
 环境：Linux x64 / Python 3.12.14 / 系统 Chromium，以及 GitHub Actions Windows Server 2022 / Python 3.12 / Playwright Chromium。Playwright 版本 1.58.0。
 
