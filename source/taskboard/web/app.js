@@ -913,11 +913,6 @@ async function taskAction(id, action) {
     ))
   )
     return;
-  if (
-    action === "trash" &&
-    !(await confirmAction("将任务移入回收站？之后可以恢复。"))
-  )
-    return;
   if (draft && !(await closeDrawer())) return;
   try {
     state = await api("task/action", { id, action });

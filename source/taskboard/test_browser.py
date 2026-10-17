@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='taskboard-browser-') as tmp:
             page.click('#bulkToggle');page.click('[data-page="calendar"]');expect(page.locator('.calendar-task')).to_have_count(2)
             page.click('[data-page="board"]');page.locator('.lane[data-status="完成"] .card').click();page.click('#archiveTask');expect(page.locator('.card')).to_have_count(1)
             page.click('[data-page="archive"]');expect(page.locator('[data-action="unarchive"]')).to_have_count(1);page.click('[data-action="unarchive"]');expect(page.locator('[data-action="unarchive"]')).to_have_count(0)
-            page.click('[data-page="board"]');page.locator('.card').first.click();page.click('#trashTask');page.click('#dialogOk');expect(page.locator('#drawer')).to_be_hidden()
+            page.click('[data-page="board"]');page.locator('.card').first.click();page.click('#trashTask');expect(page.locator('#drawer')).to_be_hidden()
             page.click('[data-page="trash"]');expect(page.locator('[data-action="restore"]')).to_have_count(1);page.click('[data-action="restore"]');expect(page.locator('[data-action="restore"]')).to_have_count(0)
             page.click('[data-page="tools"]');page.fill('#systemName','我的产品工作室');page.fill('#userName','设计师');page.click('#settingsForm button');expect(page.locator('#brandName')).to_have_text('我的产品工作室')
             page.click('#healthBtn');expect(page.locator('#healthReport')).to_contain_text('缺失 0 个')

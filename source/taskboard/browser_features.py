@@ -28,7 +28,7 @@ def run(page,context,origin,capability,artifacts):
     card('2.1 前置').click();page.select_option('#taskStatus','完成');page.click('#saveTask');expect(page.locator('#drawer')).to_be_hidden()
     card('2.1 交付').click();page.select_option('#taskStatus','完成');page.click('#saveTask');expect(card('2.1 交付')).to_have_count(2)
     # Undo removes only the requested trash action, then restores the card.
-    card('2.1 前置').click();page.click('#trashTask');page.click('#dialogOk');expect(page.locator('#drawer')).to_be_hidden();page.click('#undoButton');expect(card('2.1 前置')).to_have_count(1)
+    card('2.1 前置').click();page.click('#trashTask');expect(page.locator('#drawer')).to_be_hidden();page.click('#undoButton');expect(card('2.1 前置')).to_have_count(1)
     page.click('#bulkToggle');card('2.1 前置').locator('[data-select]').check();page.click('#bulkEdit');page.select_option('#dlg-priority','1');page.click('#dialogOk');expect(card('2.1 前置').locator('.priority')).to_have_text('高');page.click('#bulkToggle')
     page.click('[data-page="tags"]');page.select_option('[data-tag-color]','blue');expect(page.locator('.list-row .tag')).to_have_class('tag color-blue')
     page.click('#newTag');page.fill('#dlg-name','待合并');page.press('#dlg-name','Enter');expect(page.locator('[data-tag-merge]')).to_have_count(2)
@@ -44,7 +44,7 @@ def run(page,context,origin,capability,artifacts):
     page.locator('[data-preview]').first.click();page.click('#nextImage');expect(page.locator('#previewName')).to_contain_text('图片B');page.press('#imageDialog','ArrowLeft');expect(page.locator('#previewName')).to_contain_text('图片A');page.click('#closeImage')
     page.fill('#attachmentSearch','拖入');expect(page.locator('#files .file-row:visible')).to_have_count(1);page.fill('#attachmentSearch','')
     page.screenshot(path=str(artifacts/'workspace-2.1-drawer.png'));page.click('#cancelTask')
-    page.screenshot(path=str(artifacts/'workspace-2.1-board.png'),full_page=True)
+    page.evaluate('window.scrollTo(0,0)');page.screenshot(path=str(artifacts/'workspace-2.1-board.png'),full_page=True)
     page.click('[data-page="tools"]');expect(page.locator('#pageContent')).to_contain_text('2.1.0')
     with page.expect_download() as event:page.click('#diagnosticsBtn')
     data=json.loads(open(event.value.path(),encoding='utf-8').read());assert data['version']=='2.1.0' and '2.1 草稿和附件' not in str(data)
