@@ -65,13 +65,14 @@ internal sealed class TaskEditor : Window
         foreach(var f in task.A("files"))existingFiles.Add(f!.Copy());
         foreach(var v in value.A("file_versions")){var f=existingFiles.FirstOrDefault(f=>f.I("id")==v.I("id"));if(f is not null){f["version_label"]=v.S("version_label");f["version_note"]=v.S("version_note");}}
         foreach(var f in value.A("new_files"))newFiles.Add(f!.Copy());foreach(var id in value.A("removed_files"))removed.Add(int.Parse(id!.ToString()));
-        var attachmentActions=Ui.Row(Ui.Button("选择附件",async()=>{var dialog=new OpenFileDialog{Multiselect=true,Title="选择附件"};if(dialog.ShowDialog(this)==true)await AddFiles(dialog.FileNames);},"addFiles"),Ui.Text("也可拖入文件 · 单次总计 100 MB",12,Ui.Muted));
+        var attachmentActions=Ui.Row(Ui.Button("选择附件",async()=>{var dialog=new OpenFileDialog{Multiselect=true,Title="选择附件"};if(dialog.ShowDialog(this)==true)await AddFiles(dialog.FileNames);},"addFiles"),Ui.Button("粘贴截图",PasteImage),Ui.Text("拖入文件或 Ctrl+V · 单次 100 MB",12,Ui.Muted));
         var fileArea=Ui.Column(attachmentActions,progress,fileSearch,filesPanel);fileArea.AllowDrop=true;fileArea.Drop+=async(_,e)=>{if(e.Data.GetData(DataFormats.FileDrop) is string[] paths){try{await AddFiles(paths);}catch(Exception ex){Ui.Error(ex.Message);}}};RenderFiles();
         var details=Ui.Column(Ui.Section("任务说明",note),Ui.Section("标签",tagPanel),Ui.Section("检查清单",Ui.Column(checksPanel,Ui.Row(checkInput,addCheck))),Ui.Section("里程碑",Ui.Column(milestonesPanel,Ui.Row(milestoneInput,Ui.Button("添加里程碑",()=>{AddMilestone(milestoneInput.Text,false,0);milestoneInput.Clear();}))),false),Ui.Section("重复与提醒",Ui.Column(Ui.Row(repeat,basis),Ui.Text("完成当前任务后自动生成下一项；固定日期模式跳过已错过的周期。",12,Ui.Muted),Ui.Row(reminder,reminderTime),Ui.Text("程序在托盘运行时可提醒；完全退出或锁定工作区后无法提醒。",12,Ui.Muted))),Ui.Section("任务依赖",depPanel,false),Ui.Section("附件",fileArea),Ui.Section("操作记录",History(task.I("id")),false));
         var save=Ui.Button("保存任务",Save,"saveTask",true);
         var bottom=Ui.Column(saveState,Ui.Row(save,Ui.Button("关闭（保留草稿）",()=>Close(),"closeEditor"),Ui.Button("放弃草稿",async()=>{if(Ui.Confirm("放弃尚未正式保存的修改？")){await owner.rpc.Call("draft-save",J.Obj(("key",draftKey),("action","delete")));finished=true;Close();}})));
         var root=new DockPanel{Margin=new Thickness(22)};DockPanel.SetDock(top,Dock.Top);root.Children.Add(top);DockPanel.SetDock(bottom,Dock.Bottom);root.Children.Add(bottom);root.Children.Add(Ui.Scroll(details));Content=root;
         if(readOnly){top.IsEnabled=false;details.IsEnabled=false;save.IsEnabled=false;saveState.Text="已归档或回收站任务为只读，请先恢复再编辑。";}
+        PreviewKeyDown+=async(_,e)=>{if(e.Key==Key.V&&Keyboard.Modifiers.HasFlag(ModifierKeys.Control)&&Clipboard.ContainsImage()){e.Handled=true;try{await PasteImage();}catch(Exception ex){Ui.Error(ex.Message);}}};
         loading=false;initial=Collect().ToJsonString();lastDraft=restored is null?initial:"";
         draftTimer.Tick+=async(_,_)=>await SaveDraft();if(!readOnly)draftTimer.Start();
         Closing+=async(_,e)=>{if(finished||readOnly)return;e.Cancel=true;if(busy)return;busy=true;try{await SaveDraft(true);finished=true;Close();}catch(Exception ex){Ui.Error("草稿未能保存："+ex.Message);}finally{busy=false;}};
@@ -100,6 +101,13 @@ internal sealed class TaskEditor : Window
             }
             newFiles.AddRange(staged);RenderFiles();await SaveDraft(true);
         }finally{busy=false;progress.Visibility=Visibility.Collapsed;}
+    }
+    async Task PasteImage()
+    {
+        if(readOnly||!Clipboard.ContainsImage())return;var image=Clipboard.GetImage();if(image is null)return;
+        var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using var stream=new MemoryStream();encoder.Save(stream);
+        if(stream.Length+newFiles.Sum(f=>Convert.FromBase64String(f.S("data")).LongLength)>100L*1024*1024)throw new IOException("本次新增附件不能超过 100 MB");
+        newFiles.Add(J.Obj(("name","截图-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".png"),("data",Convert.ToBase64String(stream.ToArray()))));RenderFiles();await SaveDraft(true);
     }
     void RenderFiles()
     {

@@ -78,7 +78,7 @@ internal sealed partial class BoardWindow : Window
     void BuildShell()
     {
         selected.Clear();sidebar=new StackPanel{Margin=new Thickness(18)};
-        var logo=Ui.Text("T·  任务看板",23,Brushes.White);sidebar.Children.Add(logo);sidebar.Children.Add(Ui.Text("NATIVE WORKSPACE  /  3.0",10,Brushes.LightSteelBlue));
+        var logo=Ui.Row(new Image{Source=Icon,Width=40,Height=40,Margin=new Thickness(0,0,8,0)},Ui.Text("任务看板",19,Brushes.White));sidebar.Children.Add(logo);sidebar.Children.Add(Ui.Text("NATIVE WORKSPACE  /  3.0",10,Brushes.LightSteelBlue));
         foreach(string name in new[]{"看板","我的今天","日历","已归档","回收站"})sidebar.Children.Add(Ui.Button(name,()=>{page=name;selected.Clear();Render();},"nav"+name));
         sidebar.Children.Add(Ui.Text("管理工作区",12,Brushes.LightSteelBlue));
         sidebar.Children.Add(Ui.Button("标签管理",Tags,"tags"));sidebar.Children.Add(Ui.Button("草稿恢复",Drafts,"drafts"));
@@ -161,9 +161,11 @@ internal sealed partial class BoardWindow : Window
             actions.Children.Add(Ui.Button(task["options"].S("today")==DateTime.Today.ToString("yyyy-MM-dd")?"移出今日":"加入今日",async()=>{
                 var payload=Payload(task);payload["options"]!["today"]=task["options"].S("today")==DateTime.Today.ToString("yyyy-MM-dd")?"":DateTime.Today.ToString("yyyy-MM-dd");Accept(await rpc.Call("save",payload));}));
             if(task.S("status")=="完成")actions.Children.Add(ActionButton("归档",id,"archive"));else actions.Children.Add(Ui.Button("完成",async()=>Accept(await rpc.Call("action",J.Obj(("id",id),("action","move"),("status","完成"))))));
-            actions.Children.Add(ActionButton("删除",id,"trash"));
+            actions.Children.Add(ActionButton("复制",id,"duplicate"));actions.Children.Add(ActionButton("删除",id,"trash"));
         }
         content.Children.Add(actions);var card=Ui.Card(content);
+        card.AllowDrop=page is "看板" or "我的今天";
+        card.Drop+=async(_,e)=>{if(e.Data.GetData("TaskBoard.Task") is int source){e.Handled=true;if(source==id)return;try{var lane=State.A("tasks").Where(t=>t.S("status")==task.S("status")&&t.I("id")!=source).OrderBy(t=>t.I("sort_order")).ToList();int index=lane.FindIndex(t=>t.I("id")==id);Accept(await rpc.Call("action",J.Obj(("id",source),("action","move"),("status",task.S("status")),("index",Math.Max(0,index)))));}catch(Exception ex){Ui.Error(ex.Message);}}};
         Point start=default;card.PreviewMouseLeftButtonDown+=(_,e)=>start=e.GetPosition(card);
         card.MouseMove+=(_,e)=>{if(e.LeftButton==MouseButtonState.Pressed&&(e.GetPosition(card)-start).Length>12&&page is "看板" or "我的今天")DragDrop.DoDragDrop(card,new DataObject("TaskBoard.Task",id),DragDropEffects.Move);};return card;
     }

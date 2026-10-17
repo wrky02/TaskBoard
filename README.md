@@ -1,89 +1,61 @@
-# 任务看板系统 2.1.0
+# 任务看板系统 3.0 · 原生 Windows 桌面版
 
-单人、本地使用的任务看板，基于 Python 本地 HTTP 服务、系统浏览器和 SQLite。
-新版已移除 Qt / WebEngine 运行依赖。2.1 增加工作计划、重复与依赖、提醒、草稿、迁移、托盘等功能，完整规则见 [2.1 版本说明](docs/releases/2.1.0.md)。
+WPF 原生界面、本地 SQLite 数据和私有数据引擎。**不调用 Edge 或其他浏览器，不使用 WebView2、QtWebEngine、Electron，不启动 HTTP 服务。**
 
-## 使用与数据
+安装包包含 .NET 与数据引擎运行组件，用户无需安装 Python 或 .NET。适用于 Windows 10/11 x64。发布者元数据为 **wrky02**。
 
-- Windows 打包后双击 `TaskBoard.exe`。Windows 使用已安装的 Edge 应用窗口并最大化，需先安装 Microsoft Edge；Linux 开发环境使用系统浏览器。
-- 首次设置至少 8 位本机密码；后续输入密码登录。服务只监听 `127.0.0.1`，自动选用空闲端口。
-- 安装默认位置为当前用户的 `LocalAppData\Programs\TaskBoard`，可自选目录。数据优先保存在 EXE 同级 `Data`，不可写时询问是否使用用户目录。
-- Windows 关闭窗口后询问退出或留在托盘，可记住选择；托盘或桌面快捷方式可重新打开。侧栏“退出程序”关闭服务。Windows 重复启动会唤醒同一工作区窗口。
-- 显式设置 `TASKBOARD_DATA_ROOT` 或 `--data-root` 时优先使用指定目录，适合隔离开发及数据副本测试。
-- 密码用于应用登录，数据库和附件并未加密；同一 Windows 用户下的其他程序仍可能读取本地文件。不要把数据目录或 `.instance.json` 分享给其他用户。
+## 下载与使用
 
-## 功能
+[Native Windows installer 构建页面](https://github.com/wrky02/TaskBoard/actions/workflows/native-windows.yml)。选择成功构建，登录 GitHub，在 Artifacts 下载 `TaskBoard-Native-Windows-3.0.0`，解压运行 `Setup_TaskBoard_3.0.0.exe`。包内附带 SHA256SUMS.txt 与 SIGNING-STATUS.txt。
 
-三阶段任务与排序拖拽、搜索和筛选记忆、标签与批量操作、手动检查清单、里程碑确认时间、附件与截图粘贴、应用内图片预览、附件版本备注、日历、到期提醒、归档、回收站、操作记录、CSV/XLSX 导出、完整备份恢复及只读附件检查。
+尚未取得受信任的签名身份，当前包是**未签名**构建。已接入 Azure Artifact Signing 自动签名流程；申请与配置步骤见 [正式代码签名](docs/CODE-SIGNING.md)。wrky02 元数据不等于 Windows 的“已验证的发布者”。
 
-附件、检查清单、里程碑与任务字段均先在抽屉中暂存，点击“保存任务”一并提交；取消不会修改已保存数据。单文件及每次新增附件总大小不超过 100 MB；浏览器恢复支持最大 2 GB 的 ZIP。表格导出包含活动和归档任务，不带附件本体。批量操作显示成功与失败数量。任务模板已退休，旧库中的历史检查项仍保留。
+首次设置至少 8 位工作区密码。密码用于限制应用入口，数据库和附件不加密。所有任务和附件留在本机。默认数据目录为安装目录旁的 `Data`；设置页显示实际使用位置。安装目录不可写时使用历史用户目录，可通过 `--data-root` 或 `TASKBOARD_DATA_ROOT` 显式选择数据位置。
 
-## 安全升级与回滚
+## 功能与迁移
 
-1. 先关闭旧程序，备份实际安装目录、数据库和附件目录，并记录路径与 SHA256。在数据库副本上试用本版，勿直接覆盖唯一数据。
-2. 本版不会猜测其他安装目录的 `Data` 位置。旧程序若使用自选安装目录，请从旧版导出完整备份，再在新版“数据与设置”中恢复，或把完整数据副本用于 `--data-root` 演练。
-3. 升级旧库时，先生成 `before-v2-*.zip` 完整备份，再事务性移除退休的表及字段；任务、检查项、附件、标签和密码保持兼容。缺失附件或完整性检查失败会中止升级。
-4. 恢复先校验 ZIP、数据库及附件，再生成 `pre-restore-*.zip`。替换失败会尝试恢复原库和附件；自动化已覆盖文件替换失败场景，不代表断电过程已验收。
-5. 回滚时关闭新版，保留失败现场，在独立目录中恢复原备份及原安装版本。不要把升级后的唯一数据库交给旧版继续修改。
-6. 卸载脚本保留运行时生成的 `Data`。Windows CI 已验证隔离安装和卸载后数据库、附件哈希保持不变；真实旧版安装升级仍需在数据副本上验收。
+优先级、我的今天、检查清单进度、常用视图、附件拖入与截图粘贴、图片预览、草稿恢复、批量编辑、重复任务、依赖、提醒、原生日历、标签管理、归档/回收站、撤销、自动备份、迁移预览、诊断与 CSV/Excel 导出。完整规则见 [3.0 版本说明](docs/releases/3.0.0.md)。
 
-## 开发运行
+窗口关闭可选择退出或最小化到托盘，并在设置中记住选择。托盘运行且工作区已解锁时可以提醒；完全退出或锁定后不再提醒。Windows 通知策略可能隐藏系统气泡，应用内保留未处理提醒。
 
-Python 3.12；无需 Node 构建步骤、Qt 或外部数据库。
+升级沿用旧版安装标识和 Data 目录；先关闭旧版本，建议保留完整备份。旧结构升级前自动生成备份；导入 ZIP 或旧 Data 目录先校验并显示数量，再由用户确认替换。缺失附件会阻止迁移。卸载保留数据。需要回滚时，请关闭新版，在独立目录中恢复旧备份及旧程序。
 
-```sh
+## 架构
+
+- `native/TaskBoard/`：WPF 窗口、原生控件、托盘、图片与文件对话框。
+- `source/taskboard/native_worker.py`：由主程序启动的私有子进程，使用 stdin/stdout JSON 通信；无网络监听。
+- `domain.py`、`features.py`、`storage.py`：任务事务、计划与依赖、SQLite 迁移/备份等共享规则。
+- 保留 2.x 的浏览器实现用于兼容性回归，**原生安装包不包含也不启动旧入口**。
+
+## 开发和验证
+
+Windows 开发需要 .NET SDK（见 global.json）、Python 3.12；生成安装器另需 Inno Setup 6。
+
+```powershell
 python -m venv .venv
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python source/taskboard/launcher.py --data-root /tmp/taskboard-dev
+.venv\Scripts\python.exe -m pip install -r requirements-native-build.txt
+$env:TASKBOARD_PYTHON = (Resolve-Path .venv\Scripts\python.exe).Path
+$env:TASKBOARD_WORKER_SOURCE = (Resolve-Path source\taskboard\native_worker.py).Path
+dotnet run --project native/TaskBoard -- --data-root "$env:TEMP\TaskBoard-native-dev"
 ```
 
-Windows PowerShell：
+Windows 一次性构建与打包：
 
 ```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.venv\Scripts\python.exe source\taskboard\launcher.py --data-root "$env:TEMP\taskboard-dev"
+./scripts/build-native.ps1
 ```
 
-无图形云机器加 `--no-browser`，自动化测试从隔离数据目录读取启动信息。不在日志或分享截图中暴露 `.instance.json` 的启动凭据。
-应用本地工作流不需要云端账号或额外密钥。使用现有独立检出目录；无需建立 Git worktree。
-
-## 测试
-
-在 `source/taskboard`，用虚拟环境 Python 运行：
+Linux 云环境支持交叉编译和数据规则测试，无法运行 WPF 窗口：
 
 ```sh
-python -m unittest -v test_server test_startup_data test_features
+dotnet build native/TaskBoard/TaskBoard.csproj
+cd source/taskboard
+python -m unittest -v test_native_worker test_server test_startup_data test_features
 python test_storage_v13.py
-python test_browser.py
 ```
 
-浏览器测试优先使用 `/usr/bin/chromium`；也可设置 `TASKBOARD_CHROMIUM` 指向浏览器可执行文件，或先运行 `python -m playwright install chromium`。
-浏览器测试在隔离数据目录上运行，不连接真实用户库。截图保存在 `artifacts/`。详见 [验证报告](docs/VALIDATION.md)。
+所有测试用临时数据，不连接用户的真实工作区。Windows CI 实际安装后通过 UI Automation 操作原生界面，验证托盘、重复启动、退出及卸载保留数据，并监控子进程和 TCP 监听。真实输入法、DPI、多显示器仍需实机验收。详见 [验证记录](docs/VALIDATION.md)。
 
-## Windows 安装器
+签名使用 GitHub OIDC 临时身份，不在源码或制品中保存证书私钥。构建分支：`build/native-windows`。
 
-**2.1.0 安装包已生成并通过 Windows 验收：[下载页面](https://github.com/wrky02/TaskBoard/actions/runs/39020082997)。** 登录 GitHub，在 Artifacts 下载 `TaskBoard-Windows-2.1.0`，解压运行 `Setup_TaskBoard_2.1.0.exe`。发布者：wrky02。包含源码与安装后程序的托盘／关闭验证、发布者信息检查及卸载数据保留验证。
-
-在 Windows x64，安装 Python 3.12 和 Inno Setup 6 后执行：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1
-```
-
-脚本安装依赖、运行数据和接口回归、生成 `dist\TaskBoard\TaskBoard.exe`、对冻结程序做登录/保存/退出冒烟检查，再生成 `dist\Setup_TaskBoard_2.1.0.exe` 并打印 SHA256。
-`ExecutionPolicy Bypass` 仅用于运行本仓库的本地 PowerShell 脚本，不改变机器永久策略，也不关闭依赖下载的 TLS 或校验。
-
-GitHub Actions 的 `Windows installer` 工作流可手动运行；推送到 `build/windows-installer` 也会构建。工作流包含真实浏览器回归、冻结 EXE 冒烟、隔离安装/卸载与数据保留检查，成功后上传安装器。本次 Windows CI 已执行并通过，构建记录见下文。
-
-2.0.0 基线已发布：[安装器与说明](https://github.com/wrky02/TaskBoard/releases/tag/v2.0.0)。
-
-2.0.1 改进窗口图标、标签回车确认和中文日期选择器，详见 [版本说明与可选设计](docs/releases/2.0.1.md)。[Windows 构建已通过](https://github.com/wrky02/TaskBoard/actions/runs/39017729326)，登录 GitHub 后下载 Artifacts 中的 `TaskBoard-Windows-2.0.1`，解压运行 `Setup_TaskBoard_2.0.1.exe`。
-
-以下为 2.0.0 基线的验证记录：
-
-- [成功构建与安装包](https://github.com/wrky02/TaskBoard/actions/runs/39015780834)
-- 登录 GitHub 后，在 Artifacts 下载 `TaskBoard-Windows-2.0.0`，解压运行 `Setup_TaskBoard_2.0.0.exe`。
-- 构建源码提交：`e2cb5e1`；产物 ZIP 摘要：`1107064e1c884479fba2a1e61797168b4d418dc19a08fb43b3b4e22016daa69c`。
-
-已验证 Linux 源码/冻结程序及 Windows CI 的浏览器、EXE、安装/卸载流程。真实 Windows 中文输入法、窗口/任务栏、多显示器及旧安装升级仍待验收，不宣称闪烁已修复。后续构建的安装信息与安装器文件属性使用发布者 `wrky02`，发布者网站为 https://github.com/wrky02 。安装包尚未做代码签名，Windows 安全提示仍可能显示“未知发布者”；填写发布者名称不会自动获得已验证签名。
+2.0 基线保留在 [Releases](https://github.com/wrky02/TaskBoard/releases/tag/v2.0.0)。[2.1 说明](docs/releases/2.1.0.md) 对应历史浏览器版本。
