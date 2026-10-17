@@ -12,19 +12,22 @@
     />
     <link rel="stylesheet" href="/style.css" />
     <script src="/date-picker.js" defer></script>
+    <script src="/workspace.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
     <section id="login" class="login-screen">
       <div class="login-art">
-        <div class="brand-mark">T<span>·</span></div>
+        <div class="brand-mark"><img src="/brand.svg" alt="任务看板" /></div>
         <p class="eyebrow">YOUR PERSONAL WORKSPACE</p>
         <h1>让每一步推进，<br />都有迹可循。</h1>
         <p>本地保存 · 专注工作 · 从容交付</p>
         <div class="art-board"><i></i><i></i><i></i><i></i><i></i></div>
       </div>
       <form id="loginForm" class="login-form">
-        <div class="brand-mark small">T<span>·</span></div>
+        <div class="brand-mark small">
+          <img src="/brand.svg" alt="任务看板" />
+        </div>
         <p class="eyebrow">TASKBOARD / 02</p>
         <h2 id="loginHeading">欢迎回来</h2>
         <p id="loginHint" class="muted">输入本机密码，进入你的工作区。</p>
@@ -50,7 +53,9 @@
     <div id="workspace" class="workspace" hidden>
       <aside class="sidebar">
         <div class="brand">
-          <span class="brand-mark small">T<span>·</span></span>
+          <span class="brand-mark small"
+            ><img src="/brand.svg" alt="任务看板"
+          /></span>
           <div>
             <strong id="brandName">任务看板系统</strong
             ><small>PERSONAL WORKSPACE</small>
@@ -68,8 +73,9 @@
           ><button data-page="tags"><span>◇</span>标签管理</button
           ><button data-page="tools"><span>⚙</span>数据与设置</button>
         </nav>
+        <div id="savedViews" aria-label="常用视图"></div>
         <div class="sidebar-bottom">
-          <div class="local-status"><b></b> 本地工作区 <span>V2.0.1</span></div>
+          <div class="local-status"><b></b> 本地工作区 <span>V2.1.0</span></div>
           <button id="lockBtn">锁定工作区 <span>↗</span></button
           ><button id="exitBtn" class="exit">退出程序</button>
         </div>
@@ -95,6 +101,11 @@
           </div>
           <button id="newTask" class="primary">＋ 新建任务</button>
         </section>
+        <div id="draftRecovery"></div>
+        <div id="reminderBanner" class="notice-banner" hidden>
+          <span id="reminderCount"></span
+          ><button id="reminderGo">查看提醒</button>
+        </div>
         <div id="pageContent"></div>
       </main>
     </div>
@@ -108,39 +119,103 @@
       </header>
       <form id="taskForm">
         <div class="drawer-body">
-          <label for="taskTitle">任务标题 <span>*</span></label
-          ><input
-            id="taskTitle"
-            maxlength="240"
-            required
-            placeholder="这次准备完成什么？"
-          />
-          <div class="two-fields">
-            <div>
-              <label for="taskStatus">当前阶段</label
-              ><select id="taskStatus">
-                <option>计划中</option>
-                <option>进行中</option>
-                <option>完成</option>
-              </select>
-            </div>
-            <div>
-              <label for="dueButton">截止日期</label>
-              <input id="taskDue" type="hidden" />
-              <button
-                id="dueButton"
-                type="button"
-                class="due-button"
-                aria-haspopup="dialog"
-                aria-controls="dateDialog"
-              >
-                <span id="dueLabel">设置截止日期</span>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 5h16v16H4z M4 10h16 M8 2v6 M16 2v6" />
-                </svg>
-              </button>
+          <div class="task-basics">
+            <label for="taskTitle">任务标题 <span>*</span></label
+            ><input
+              id="taskTitle"
+              maxlength="240"
+              required
+              placeholder="这次准备完成什么？"
+            />
+            <div class="two-fields">
+              <div>
+                <label for="taskStatus">当前阶段</label
+                ><select id="taskStatus">
+                  <option>计划中</option>
+                  <option>进行中</option>
+                  <option>完成</option>
+                </select>
+              </div>
+              <div>
+                <label for="dueButton">截止日期</label>
+                <input id="taskDue" type="hidden" />
+                <button
+                  id="dueButton"
+                  type="button"
+                  class="due-button"
+                  aria-haspopup="dialog"
+                  aria-controls="dateDialog"
+                >
+                  <span id="dueLabel">设置截止日期</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 5h16v16H4z M4 10h16 M8 2v6 M16 2v6" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
+          <div class="two-fields">
+            <div>
+              <label for="taskPriority">优先级</label
+              ><select id="taskPriority">
+                <option value="0">紧急</option>
+                <option value="1">高</option>
+                <option value="2" selected>普通</option>
+                <option value="3">低</option>
+              </select>
+            </div>
+            <label class="today-choice"
+              ><input id="taskToday" type="checkbox" />加入今日计划</label
+            >
+          </div>
+          <details class="task-section">
+            <summary>重复、依赖与提醒</summary>
+            <div class="two-fields">
+              <div>
+                <label for="taskRepeat">重复频率</label
+                ><select id="taskRepeat">
+                  <option value="off">不重复</option>
+                  <option value="daily">每天</option>
+                  <option value="weekly">每周</option>
+                  <option value="monthly">每月</option>
+                </select>
+              </div>
+              <div>
+                <label for="repeatBasis">下一次计算方式</label
+                ><select id="repeatBasis">
+                  <option value="due">按原截止日期</option>
+                  <option value="completion">按完成日期</option>
+                </select>
+              </div>
+            </div>
+            <p class="hint">
+              完成后生成下一项；按原日期计算会跳过已错过周期。月末适配短月份，附件不复制。
+            </p>
+            <label for="dependencySearch">等待这些任务完成</label
+            ><input id="dependencySearch" placeholder="搜索依赖任务…" />
+            <div id="taskDependencies" class="dependency-list"></div>
+            <p class="hint">
+              未完成或在回收站的依赖会阻止标记完成；禁止循环依赖。
+            </p>
+            <div class="two-fields">
+              <div>
+                <label for="taskReminder">应用内提醒</label
+                ><select id="taskReminder">
+                  <option value="off">不提醒</option>
+                  <option value="today">截止当天</option>
+                  <option value="before">提前一天</option>
+                </select>
+              </div>
+              <div>
+                <label for="reminderTime">本机提醒时间</label
+                ><input type="time" id="reminderTime" value="09:00" />
+              </div>
+            </div>
+            <p class="hint">
+              工作区打开并登录时显示提醒；关闭窗口或完全退出后无法显示，重新打开后补提醒。
+            </p>
+          </details>
+          <p id="draftStatus" class="hint" role="status"></p>
           <label>任务标签</label>
           <div id="taskTags" class="tag-options"></div>
           <label for="taskNote">备注与内容</label
@@ -149,41 +224,61 @@
             rows="5"
             placeholder="记录需求、过程与结果，也可以粘贴截图…"
           ></textarea>
-          <div class="section-label">
-            <h3>手动检查清单</h3>
-            <span id="checkCount"></span>
-          </div>
-          <div id="checklist"></div>
-          <div class="inline-add">
+          <details class="task-section" open>
+            <summary>手动检查清单</summary>
+            <div class="section-label">
+              <h3>检查进度</h3>
+              <span id="checkCount"></span>
+            </div>
+            <div id="checklist"></div>
+            <div class="inline-add">
+              <input
+                id="checkInput"
+                placeholder="添加一项检查内容"
+                maxlength="120"
+              /><button type="button" id="addCheck">＋</button>
+            </div>
+          </details>
+          <details class="task-section" open>
+            <summary>里程碑</summary>
+            <div class="section-label"><h3>关键节点</h3></div>
+            <div id="milestones"></div>
+            <div class="inline-add">
+              <input
+                id="milestoneInput"
+                placeholder="添加关键节点"
+                maxlength="120"
+              /><button type="button" id="addMilestone">＋</button>
+            </div>
+          </details>
+          <details class="task-section" open>
+            <summary>图片与文档</summary>
+            <div class="section-label">
+              <h3>附件</h3>
+              <button type="button" id="pickFiles" class="text-button">
+                ＋ 添加附件
+              </button>
+            </div>
+            <p class="hint">
+              附件、版本备注、检查项都在点击“保存任务”后生效；取消会放弃更改。单文件及本次新增附件总计上限
+              100 MB。
+            </p>
+            <input type="file" id="fileInput" multiple hidden />
             <input
-              id="checkInput"
-              placeholder="添加一项检查内容"
-              maxlength="120"
-            /><button type="button" id="addCheck">＋</button>
-          </div>
-          <div class="section-label"><h3>里程碑</h3></div>
-          <div id="milestones"></div>
-          <div class="inline-add">
-            <input
-              id="milestoneInput"
-              placeholder="添加关键节点"
-              maxlength="120"
-            /><button type="button" id="addMilestone">＋</button>
-          </div>
-          <div class="section-label">
-            <h3>图片与文档</h3>
-            <button type="button" id="pickFiles" class="text-button">
-              ＋ 添加附件
-            </button>
-          </div>
-          <p class="hint">
-            附件、版本备注、检查项都在点击“保存任务”后生效；取消会放弃更改。单文件及本次新增附件总计上限
-            100 MB。
-          </p>
-          <input type="file" id="fileInput" multiple hidden />
-          <div id="files"></div>
-          <h3>近期记录</h3>
-          <div id="taskHistory" class="history-mini"></div>
+              id="attachmentSearch"
+              placeholder="按附件名称搜索…"
+              aria-label="搜索附件"
+            />
+            <p class="hint">可直接将文件拖入任务抽屉。</p>
+            <div id="files"></div>
+          </details>
+          <details class="task-section">
+            <summary>操作记录</summary>
+            <h3>近期记录</h3>
+            <div id="taskHistory" class="history-mini"></div>
+          </details>
+          <progress id="uploadProgress" max="1" value="0" hidden></progress
+          ><span id="uploadLabel" class="hint"></span>
         </div>
         <footer>
           <button type="button" id="duplicateTask">复制</button
@@ -210,6 +305,8 @@
       <button id="closeImage" aria-label="关闭图片">×</button
       ><img id="previewImage" alt="附件图片预览" />
       <p id="previewName"></p>
+      <button type="button" id="previousImage">← 上一张</button
+      ><button type="button" id="nextImage">下一张 →</button>
     </dialog>
     <dialog id="dateDialog" aria-labelledby="dateTitle">
       <div class="date-heading">
@@ -244,6 +341,9 @@
         </button>
       </div>
     </dialog>
+    <div id="undoBar" hidden role="status">
+      操作已完成 <button id="undoButton">撤销</button><small>15 秒内有效</small>
+    </div>
     <div id="toast" role="status" hidden></div>
   </body>
 </html>

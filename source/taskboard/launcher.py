@@ -10,6 +10,7 @@ import time
 import urllib.request
 import webbrowser
 import storage as store
+import features
 from server import TaskServer
 
 
@@ -85,7 +86,9 @@ def main():
                 origin = f'http://127.0.0.1:{port}'
                 with urllib.request.urlopen(origin + '/api/status', timeout=1) as response:
                     if response.status == 200:
-                        if not args.no_browser: open_browser(origin + '/#' + info['capability'])
+                        if not args.no_browser:
+                            req=urllib.request.Request(origin+'/api/window',data=b'{}',headers={'Origin':origin,'X-TaskBoard':info['capability'],'Content-Type':'application/json'})
+                            with urllib.request.urlopen(req,timeout=5):pass
                         return 0
             except (OSError, ValueError, KeyError): time.sleep(0.1)
         message('任务看板系统', '另一个实例正在启动或无响应，请稍后重试。')
@@ -95,11 +98,22 @@ def main():
         location = store.prepare_data_root(target)
         if location['status'] == 'fallback' and not message('数据保存位置', '安装目录不可写，是否改用以下位置？\n' + location['path'], True): return 1
         # Startup migrations complete before the browser is opened.
-        db = store.connect(); db.close()
+        db = store.connect()
+        try:
+            try:
+                features.auto_backup(db)
+                with db:db.execute("DELETE FROM settings WHERE key='backup_error'")
+            except (OSError,ValueError,__import__('zipfile').BadZipFile) as exc:
+                with db:db.execute("INSERT OR REPLACE INTO settings VALUES ('backup_error',?)",(str(exc),))
+        finally:db.close()
         server = TaskServer(('127.0.0.1', args.port))
         info_file.write_text(json.dumps({'port': server.server_port, 'capability': server.capability}))
         if os.name != 'nt': info_file.chmod(0o600)
-        if not args.no_browser: open_browser(server.launch_url)
+        if not args.no_browser:
+            if os.name=='nt':
+                from desktop import WindowsDesktop
+                server.desktop=WindowsDesktop(server,root);server.desktop.start()
+            else:open_browser(server.launch_url)
         server.serve_forever(poll_interval=0.2)
         return 0
     except (OSError, ValueError, RuntimeError, __import__('sqlite3').Error) as exc:
@@ -107,7 +121,9 @@ def main():
         return 1
     except KeyboardInterrupt: return 0
     finally:
-        if server: server.server_close()
+        if server:
+            if getattr(server,'desktop',None):server.desktop.stop()
+            server.server_close()
         info_file.unlink(missing_ok=True)
         lock.close()
 

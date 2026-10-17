@@ -1,14 +1,14 @@
-# 任务看板系统 2.0.1
+# 任务看板系统 2.1.0
 
 单人、本地使用的任务看板，基于 Python 本地 HTTP 服务、系统浏览器和 SQLite。
-新版已移除 Qt / WebEngine 运行依赖，重新设计登录页、导航、看板和任务抽屉。
+新版已移除 Qt / WebEngine 运行依赖。2.1 增加工作计划、重复与依赖、提醒、草稿、迁移、托盘等功能，完整规则见 [2.1 版本说明](docs/releases/2.1.0.md)。
 
 ## 使用与数据
 
-- Windows 打包后双击 `TaskBoard.exe`。优先用已安装的 Edge 应用窗口启动并最大化，未找到 Edge 则使用默认浏览器。
+- Windows 打包后双击 `TaskBoard.exe`。Windows 使用已安装的 Edge 应用窗口并最大化，需先安装 Microsoft Edge；Linux 开发环境使用系统浏览器。
 - 首次设置至少 8 位本机密码；后续输入密码登录。服务只监听 `127.0.0.1`，自动选用空闲端口。
 - 安装默认位置为当前用户的 `LocalAppData\Programs\TaskBoard`，可自选目录。数据优先保存在 EXE 同级 `Data`，不可写时询问是否使用用户目录。
-- 关闭浏览器窗口后服务继续运行，快捷方式可重新打开。使用侧栏“退出程序”关闭服务；重复启动复用同一数据目录的服务，可能打开另一个浏览器窗口。
+- Windows 关闭窗口后询问退出或留在托盘，可记住选择；托盘或桌面快捷方式可重新打开。侧栏“退出程序”关闭服务。Windows 重复启动会唤醒同一工作区窗口。
 - 显式设置 `TASKBOARD_DATA_ROOT` 或 `--data-root` 时优先使用指定目录，适合隔离开发及数据副本测试。
 - 密码用于应用登录，数据库和附件并未加密；同一 Windows 用户下的其他程序仍可能读取本地文件。不要把数据目录或 `.instance.json` 分享给其他用户。
 
@@ -53,7 +53,7 @@ py -3.12 -m venv .venv
 在 `source/taskboard`，用虚拟环境 Python 运行：
 
 ```sh
-python -m unittest -v test_server test_startup_data
+python -m unittest -v test_server test_startup_data test_features
 python test_storage_v13.py
 python test_browser.py
 ```
@@ -69,7 +69,7 @@ python test_browser.py
 powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1
 ```
 
-脚本安装依赖、运行数据和接口回归、生成 `dist\TaskBoard\TaskBoard.exe`、对冻结程序做登录/保存/退出冒烟检查，再生成 `dist\Setup_TaskBoard_2.0.1.exe` 并打印 SHA256。
+脚本安装依赖、运行数据和接口回归、生成 `dist\TaskBoard\TaskBoard.exe`、对冻结程序做登录/保存/退出冒烟检查，再生成 `dist\Setup_TaskBoard_2.1.0.exe` 并打印 SHA256。
 `ExecutionPolicy Bypass` 仅用于运行本仓库的本地 PowerShell 脚本，不改变机器永久策略，也不关闭依赖下载的 TLS 或校验。
 
 GitHub Actions 的 `Windows installer` 工作流可手动运行；推送到 `build/windows-installer` 也会构建。工作流包含真实浏览器回归、冻结 EXE 冒烟、隔离安装/卸载与数据保留检查，成功后上传安装器。本次 Windows CI 已执行并通过，构建记录见下文。

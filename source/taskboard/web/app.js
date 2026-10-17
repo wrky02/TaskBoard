@@ -81,13 +81,16 @@ async function api(path, data) {
           },
           body: JSON.stringify(data),
         };
-  const r = await fetch("/api/" + path, options);
+  const r =
+    path === "task/save"
+      ? await uploadRequest("/api/" + path, options)
+      : await fetch("/api/" + path, options);
   const result = await r.json();
   if (!r.ok) {
     if (r.status === 401 && path !== "login") {
       saving = false;
-      await closeDrawer(true);
       state = null;
+      await closeDrawer(true);
       $("#pageContent").replaceChildren();
       showLogin(false);
     }
@@ -125,6 +128,22 @@ async function dialog(title, message, fields = [], ok = "确定", cancel = true)
         `<label for="dlg-${esc(f.key)}">${esc(f.label)}</label>${f.options ? `<select id="dlg-${esc(f.key)}" name="${esc(f.key)}">${f.options.map((o) => `<option value="${esc(o.value)}" ${String(o.value) === String(f.value) ? "selected" : ""}>${esc(o.label)}</option>`).join("")}</select>` : `<input id="dlg-${esc(f.key)}" name="${esc(f.key)}" value="${esc(f.value || "")}" type="${f.secret ? "password" : "text"}" maxlength="${f.maxLength || 240}" ${f.required ? "required" : ""}>`}`,
     )
     .join("");
+  if (title === "新建标签" && state) {
+    const input = $("#dlg-name");
+    input.setAttribute("list", "tagSuggestions");
+    $("#dialogFields").insertAdjacentHTML(
+      "beforeend",
+      `<datalist id="tagSuggestions">${state.tags.map((t) => `<option value="${esc(t.name)}"></option>`).join("")}</datalist>`,
+    );
+    input.addEventListener("input", () => {
+      $("#dialogMessage").textContent = state.tags.some(
+        (t) =>
+          t.name.toLocaleLowerCase() === input.value.trim().toLocaleLowerCase(),
+      )
+        ? "已有同名标签，可直接使用。"
+        : message;
+    });
+  }
   $("#dialogOk").textContent = ok;
   $("#dialogCancel").hidden = !cancel;
   $("#dialog").returnValue = "";
@@ -153,6 +172,9 @@ async function confirmAction(message, title = "确认操作", ok = "确定") {
 }
 function showLogin(first) {
   firstRun = first;
+  $("#reminderBanner").hidden = true;
+  $("#undoBar").hidden = true;
+  $("#draftRecovery").replaceChildren();
   $("#login").hidden = false;
   $("#workspace").hidden = true;
   $("#loginHeading").textContent = first ? "创建你的工作区" : "欢迎回来";
@@ -182,6 +204,7 @@ async function enter(data) {
   $("#workspace").hidden = false;
   applyBrand();
   render();
+  await loadDrafts();
   if (state.reminder_mode === "login" && overdue().length)
     notify(`有 ${overdue().length} 项任务已逾期，可前往“到期提醒”查看。`);
 }
@@ -226,13 +249,16 @@ function localISO(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function filtered() {
-  return state.tasks.filter(
-    (t) =>
-      (!query ||
-        (t.title + " " + t.note)
-          .toLocaleLowerCase()
-          .includes(query.toLocaleLowerCase())) &&
-      (!tagFilter || t.tags.some((v) => String(v.id) === String(tagFilter))),
+  return sortTasks(
+    state.tasks.filter(
+      (t) =>
+        extraMatch(t) &&
+        (!query ||
+          (t.title + " " + t.note)
+            .toLocaleLowerCase()
+            .includes(query.toLocaleLowerCase())) &&
+        (!tagFilter || t.tags.some((v) => String(v.id) === String(tagFilter))),
+    ),
   );
 }
 function tagOptions(empty = "全部标签") {
@@ -251,7 +277,7 @@ function card(t) {
     ? `${t.checklist.filter((c) => c.done).length}/${t.checklist.length} 检查项`
     : "尚无检查项";
   const expired = t.status !== "完成" && t.due_date && t.due_date < state.today;
-  return `<article class="card" draggable="${!bulk}" data-task="${t.id}" tabindex="0" role="button" aria-label="查看任务：${esc(t.title)}">${bulk ? `<label class="card-select"><input type="checkbox" data-select="${t.id}" ${selected.has(t.id) ? "checked" : ""}> 选择任务</label>` : ""}<div>${t.tags.map((tag) => `<span class="tag">${esc(tag.name)}</span>`).join("")}</div><h3>${esc(t.title)}</h3><p>${esc(t.note || "还没有备注，记录下一步的想法…")}</p><div class="card-bottom"><span class="${expired ? "overdue" : ""}">${expired ? "已逾期 · " : ""}${esc(t.due_date || "未设截止日期")}</span><span>${t.files.length ? "附件 " + t.files.length + " · " : ""}${check}</span></div></article>`;
+  return `<article class="card" draggable="${!bulk && extraFilters.sort === "manual"}" data-task="${t.id}" tabindex="0" role="button" aria-label="查看任务：${esc(t.title)}">${bulk ? `<label class="card-select"><input type="checkbox" data-select="${t.id}" ${selected.has(t.id) ? "checked" : ""}> 选择任务</label>` : ""}<div>${t.tags.map((tag) => `<span class="tag color-${esc(tag.color || "purple")}">${esc(tag.name)}</span>`).join("")}</div><h3>${esc(t.title)}</h3><div class="task-badges"><span class="priority p${t.options.priority}">${priorityNames[t.options.priority]}</span>${t.options.repeat !== "off" ? '<span class="tag">↻ 重复</span>' : ""}${t.options.today === state.today ? '<span class="tag">今日计划</span>' : ""}</div>${t.blocked.length ? `<p class="blocked">等待：${t.blocked.map((x) => esc(x.title)).join("、")}</p>` : ""}<p>${esc(t.note || "还没有备注，记录下一步的想法…")}</p><div class="card-bottom"><span class="${expired ? "overdue" : ""}">${esc(relativeDue(t))}</span><span>${t.files.length ? "附件 " + t.files.length + " · " : ""}${check}</span></div></article>`;
 }
 function board() {
   return `<section class="stats">${[
@@ -266,7 +292,7 @@ function board() {
     )
     .join(
       "",
-    )}</section><div class="toolbar"><input id="search" value="${esc(query)}" placeholder="搜索任务标题或备注…" aria-label="搜索任务"><select id="tagFilter" aria-label="按标签筛选">${tagOptions()}</select><span class="spacer"></span><span class="count" id="resultCount"></span><button id="bulkToggle">${bulk ? "退出批量" : "批量选择"}</button></div><div id="bulkSlot"></div><div id="lanes" class="board"></div><p class="board-footnote">跨列拖动改变阶段 · 同列拖动调整顺序 · 所有数据保存在本机</p>`;
+    )}</section>${workspaceToolbar()}<div class="toolbar"><input id="search" value="${esc(query)}" placeholder="搜索任务标题或备注…" aria-label="搜索任务"><select id="tagFilter" aria-label="按标签筛选">${tagOptions()}</select><span class="spacer"></span><span class="count" id="resultCount"></span><button id="bulkToggle">${bulk ? "退出批量" : "批量选择"}</button></div><div id="bulkSlot"></div><div id="lanes" class="board"></div><p class="board-footnote">跨列拖动改变阶段 · 同列拖动调整顺序 · 所有数据保存在本机</p>`;
 }
 function drawLanes() {
   const tasks = filtered();
@@ -321,6 +347,7 @@ function drawLanes() {
         });
         drawLanes();
         notify("任务顺序已保存");
+        showUndo(state.undo);
       } catch (err) {
         report(err);
         drawLanes();
@@ -367,9 +394,10 @@ function bindCards() {
 function drawBulk() {
   if (!$("#bulkSlot")) return;
   $("#bulkSlot").innerHTML = bulk
-    ? `<div class="bulk-bar"><strong>已选 ${selected.size} 项</strong><select id="bulkStatus" aria-label="批量目标阶段"><option>计划中</option><option>进行中</option><option>完成</option></select><button id="bulkMove">变更阶段</button><select id="bulkTag" aria-label="批量添加标签">${tagOptions("选择标签")}</select><button id="bulkAddTag">添加标签</button><button id="bulkTrash" class="danger-text">移入回收站</button></div>`
+    ? `<div class="bulk-bar"><strong>已选 ${selected.size} 项</strong><button id="bulkEdit">批量编辑</button><select id="bulkStatus" aria-label="批量目标阶段"><option>计划中</option><option>进行中</option><option>完成</option></select><button id="bulkMove">变更阶段</button><select id="bulkTag" aria-label="批量添加标签">${tagOptions("选择标签")}</select><button id="bulkAddTag">添加标签</button><button id="bulkTrash" class="danger-text">移入回收站</button></div>`
     : "";
   if (!bulk) return;
+  $("#bulkEdit").onclick = batchEdit;
   $("#bulkMove").onclick = () =>
     runBulk("status", { status: $("#bulkStatus").value });
   $("#bulkAddTag").onclick = () => {
@@ -422,7 +450,7 @@ function calendar() {
   ).join("")}</div>`;
 }
 function tools() {
-  return `<div class="settings-grid"><section class="panel"><h3>工作区偏好</h3><form id="settingsForm"><label for="systemName">系统名称</label><input id="systemName" maxlength="60" value="${esc(state.names.system_name)}" placeholder="任务看板系统"><label for="userName">使用人姓名</label><input id="userName" maxlength="40" value="${esc(state.names.user_name)}"><label for="reminderMode">登录提醒</label><select id="reminderMode"><option value="login" ${state.reminder_mode === "login" ? "selected" : ""}>登录时提醒逾期任务</option><option value="off" ${state.reminder_mode === "off" ? "selected" : ""}>关闭提醒</option></select><button class="primary" type="submit">保存设置</button></form></section><section class="panel"><h3>备份与恢复</h3><p class="hint">完整备份包含数据库和全部附件（含归档与回收站）。恢复前会校验文件并自动保留恢复前副本。请定期把备份保存到其他磁盘。</p><div class="tools-actions"><button id="backupBtn">下载完整备份</button><button id="restoreBtn">从备份恢复</button></div><input type="file" id="restoreInput" accept=".zip" hidden><h3 class="section-label">任务清单导出</h3><p class="hint">CSV / Excel 包含当前及归档任务，不包含附件本体。</p><div class="tools-actions"><button id="csvBtn">导出 CSV</button><button id="xlsxBtn">导出 Excel</button></div></section><section class="panel"><h3>附件健康检查</h3><p class="hint">只读检查缺失附件与未引用文件，不自动删除任何文件。</p><button id="healthBtn">开始检查</button><div id="healthReport" class="health-report"></div></section><section class="panel"><h3>密码与安全</h3><p class="hint">密码用于本机工作区登录。退出程序会关闭本地服务；关闭浏览器窗口后服务仍可通过快捷方式重新打开。电脑的其他使用者应使用独立 Windows 账户。</p><button id="passwordBtn">修改本机密码</button></section></div>`;
+  return `<div class="settings-grid"><section class="panel"><h3>工作区偏好</h3><form id="settingsForm"><label for="systemName">系统名称</label><input id="systemName" maxlength="60" value="${esc(state.names.system_name)}" placeholder="任务看板系统"><label for="userName">使用人姓名</label><input id="userName" maxlength="40" value="${esc(state.names.user_name)}"><label for="reminderMode">登录提醒</label><select id="reminderMode"><option value="login" ${state.reminder_mode === "login" ? "selected" : ""}>登录时提醒逾期任务</option><option value="off" ${state.reminder_mode === "off" ? "selected" : ""}>关闭提醒</option></select><label for="closeBehavior">Windows 关闭窗口时</label><select id="closeBehavior"><option value="ask">每次询问</option><option value="exit">退出程序</option><option value="tray">保留在托盘</option></select><button class="primary" type="submit">保存设置</button></form></section><section class="panel"><h3>备份与迁移</h3><p class="hint">每天首次启动自动完整备份，保留最近 7 份。最近备份：${esc(state.info.last_backup || "尚无自动备份")} ${state.info.backup_error ? "；备份失败："+esc(state.info.backup_error) : ""}</p><p class="hint">完整备份包含数据库和全部附件（含归档与回收站）。恢复前会校验文件并自动保留恢复前副本。请定期把备份保存到其他磁盘。</p><div class="tools-actions"><button id="backupBtn">下载完整备份</button><button id="restoreBtn">从 ZIP 备份恢复</button><button id="migrationBtn">导入旧版 Data 目录</button><input id="migrationInput" type="file" webkitdirectory multiple hidden></div><input type="file" id="restoreInput" accept=".zip" hidden><h3 class="section-label">任务清单导出</h3><p class="hint">CSV / Excel 包含当前及归档任务，不包含附件本体。</p><div class="tools-actions"><button id="csvBtn">导出 CSV</button><button id="xlsxBtn">导出 Excel</button></div></section><section class="panel"><h3>版本与诊断</h3><p>版本 ${esc(state.version)} · 发布者 wrky02</p><p class="hint">数据位置：${esc(state.info.data_path)}</p><button id="diagnosticsBtn">导出诊断报告</button><p class="hint">不包含任务标题、正文、附件、凭据或本地路径。</p><h3>附件健康检查</h3><p class="hint">只读检查缺失附件与未引用文件，不自动删除任何文件。</p><button id="healthBtn">开始检查</button><div id="healthReport" class="health-report"></div></section><section class="panel"><h3>密码与安全</h3><p class="hint">密码用于本机工作区登录。退出程序会关闭本地服务；关闭浏览器窗口后服务仍可通过快捷方式重新打开。电脑的其他使用者应使用独立 Windows 账户。</p><button id="passwordBtn">修改本机密码</button></section></div>`;
 }
 function render() {
   if (!state) return;
@@ -438,8 +466,10 @@ function render() {
   const pages = {
     board,
     calendar,
+    today: () =>
+      `<section class="panel">${taskList(state.tasks.filter((t) => t.status !== "完成" && (t.options.today === state.today || (t.due_date && t.due_date <= state.today))))}</section>`,
     reminders: () =>
-      `<section class="panel"><h3>已逾期 · ${overdue().length} 项</h3>${taskList(overdue())}</section><section class="panel"><h3>未来三天 · ${soon().length} 项</h3>${taskList(soon())}</section>`,
+      `<section class="panel"><h3>待处理提醒</h3><div id="reminderItems"></div><p class="hint">工作区打开并登录时检查；关闭窗口或退出后不显示通知。</p></section><section class="panel"><h3>已逾期 · ${overdue().length} 项</h3>${taskList(overdue())}</section><section class="panel"><h3>未来三天 · ${soon().length} 项</h3>${taskList(soon())}</section>`,
     archive: () =>
       `<section class="panel">${taskList(state.archived, "archive")}</section>`,
     trash: () =>
@@ -447,7 +477,7 @@ function render() {
     activity: () =>
       `<section class="panel">${state.activity.map((a) => `<div class="list-row"><div class="grow"><strong>${esc(a.action)}</strong> · ${esc(a.title)}<p>${esc(a.detail)}</p></div><small class="muted">${esc(a.at.replace("T", " "))}</small></div>`).join("") || '<div class="empty">暂无记录。</div>'}</section>`,
     tags: () =>
-      `<section class="panel"><div class="toolbar"><h3>全部标签</h3><span class="spacer"></span><button id="newTag" class="primary">＋ 新建标签</button></div>${state.tags.map((t) => `<div class="list-row"><span class="tag">${esc(t.name)}</span><span class="grow"></span><button data-tag-edit="${t.id}">重命名</button><button data-tag-delete="${t.id}" class="danger-text">删除</button></div>`).join("") || '<div class="empty">添加标签，整理你的工作。</div>'}</section>`,
+      `<section class="panel"><div class="toolbar"><h3>全部标签</h3><span class="spacer"></span><button id="newTag" class="primary">＋ 新建标签</button></div>${state.tags.map((t) => `<div class="list-row"><span class="tag color-${esc(t.color)}">${esc(t.name)}</span><small>${t.count} 项使用</small><span class="grow"></span><select data-tag-color="${t.id}" aria-label="标签颜色">${["purple", "blue", "green", "orange", "red", "gray"].map((c, i) => `<option value="${c}" ${t.color === c ? "selected" : ""}>${["紫色", "蓝色", "绿色", "橙色", "红色", "灰色"][i]}</option>`).join("")}</select><button data-tag-merge="${t.id}">合并</button><button data-tag-edit="${t.id}">重命名</button><button data-tag-delete="${t.id}" class="danger-text">删除</button></div>`).join("") || '<div class="empty">添加标签，整理你的工作。</div>'}</section>`,
     tools,
   };
   $("#pageContent").innerHTML = pages[page]();
@@ -494,6 +524,7 @@ function render() {
   );
   if (page === "tags") bindTags();
   if (page === "tools") bindTools();
+  bindWorkspace();
 }
 function saveView() {
   clearTimeout(viewTimer);
@@ -536,6 +567,7 @@ function showTask(id = null, status = "计划中") {
   $("#taskTitle").value = draft.title;
   $("#taskStatus").value = draft.status;
   $("#taskDue").value = draft.due_date || "";
+  fillOptions(draft);
   updateDueLabel();
   $("#taskNote").value = draft.note;
   $("#taskTags").innerHTML =
@@ -575,6 +607,7 @@ async function closeDrawer(force = false) {
     ))
   )
     return false;
+  if (state) await clearDraft();
   draft = null;
   dirty = false;
   $("#drawer").hidden = true;
@@ -603,10 +636,12 @@ document.addEventListener(
   },
   true,
 );
-$("#taskForm").addEventListener("input", () => {
+$("#taskForm").addEventListener("input", (event) => {
+  if (event.target.matches("#attachmentSearch, #dependencySearch")) return;
   dirty = true;
 });
-$("#taskForm").addEventListener("change", () => {
+$("#taskForm").addEventListener("change", (event) => {
+  if (event.target.matches("#attachmentSearch, #dependencySearch")) return;
   dirty = true;
 });
 function drawChecks() {
@@ -625,6 +660,23 @@ function drawChecks() {
         draft.checklist[Number(cb.dataset.check)].done = cb.checked;
         dirty = true;
         drawChecks();
+        if (
+          cb.checked &&
+          draft.checklist.length &&
+          draft.checklist.every((c) => c.done) &&
+          $("#taskStatus").value !== "完成"
+        ) {
+          confirmAction(
+            "所有检查项已完成，要在保存时将任务标记完成吗？",
+            "检查清单完成",
+            "标记完成",
+          ).then((ok) => {
+            if (ok && draft) {
+              $("#taskStatus").value = "完成";
+              dirty = true;
+            }
+          });
+        }
       }),
   );
   $$("[data-check-remove]").forEach(
@@ -697,7 +749,7 @@ function drawFiles() {
       .filter((f) => !draft.removed_files.includes(f.id))
       .map(
         (f) =>
-          `<div class="file-row">${f.is_image ? `<img src="${f.url}" data-preview="${f.id}" alt="${esc(f.filename)}">` : ""}<div class="grow"><div class="file-name">${esc(f.filename)}</div><input data-file-label="${f.id}" maxlength="20" value="${esc(f.version_label)}" aria-label="附件版本标签"><input data-file-note="${f.id}" maxlength="200" value="${esc(f.version_note)}" placeholder="版本备注" aria-label="附件版本备注"></div><button type="button" data-download="${f.id}">下载</button><button type="button" data-remove-file="${f.id}" aria-label="移除附件">×</button></div>`,
+          `<div class="file-row">${f.is_image ? `<img src="${f.url}" data-preview="${f.id}" alt="${esc(f.filename)}">` : ""}<div class="grow"><div class="file-name">${esc(f.filename)}</div><small>${(f.size / 1024).toFixed(1)} KB</small><input data-file-label="${f.id}" maxlength="20" value="${esc(f.version_label)}" aria-label="附件版本标签"><input data-file-note="${f.id}" maxlength="200" value="${esc(f.version_note)}" placeholder="版本备注" aria-label="附件版本备注"></div><button type="button" data-download="${f.id}">下载</button><button type="button" data-remove-file="${f.id}" aria-label="移除附件">×</button></div>`,
       )
       .join("") +
     draft.new_files
@@ -754,6 +806,9 @@ function drawFiles() {
   );
 }
 function previewFile(f) {
+  imageIndex = draft.files
+    .filter((x) => x.is_image && !draft.removed_files.includes(x.id))
+    .findIndex((x) => x.id === f.id);
   $("#previewImage").src = f.url;
   $("#previewName").textContent = f.filename;
   $("#imageDialog").showModal();
@@ -820,6 +875,10 @@ $("#taskForm").onsubmit = async (e) => {
       note: $("#taskNote").value,
       status: $("#taskStatus").value,
       due: $("#taskDue").value,
+      options: readOptions(),
+      dependencies: $$("#taskDependencies input:checked").map((x) =>
+        Number(x.value),
+      ),
       tags: $$("#taskTags input:checked").map((x) => Number(x.value)),
       checklist: draft.checklist,
       milestones: draft.milestones,
@@ -839,6 +898,9 @@ $("#taskForm").onsubmit = async (e) => {
   } finally {
     saving = false;
     $("#saveTask").disabled = false;
+    $("#uploadProgress").hidden = true;
+    $("#uploadLabel").textContent = "";
+    loadDrafts();
   }
 };
 async function taskAction(id, action) {
@@ -861,6 +923,7 @@ async function taskAction(id, action) {
     state = await api("task/action", { id, action });
     render();
     notify("操作已完成");
+    showUndo(state.undo);
   } catch (err) {
     report(err);
   }
@@ -875,6 +938,13 @@ function bindTags() {
     ]);
     if (r)
       try {
+        if (
+          state.tags.some(
+            (t) =>
+              t.name.toLocaleLowerCase() === r.name.trim().toLocaleLowerCase(),
+          )
+        )
+          return notify("已有同名标签，请直接使用。");
         state = await api("tag", { action: "create", name: r.name });
         render();
       } catch (err) {
@@ -955,6 +1025,7 @@ function bindTools() {
         system_name: $("#systemName").value,
         user_name: $("#userName").value,
         reminder_mode: $("#reminderMode").value,
+        close_behavior: $("#closeBehavior").value,
       });
       render();
       notify("设置已保存");
@@ -971,9 +1042,25 @@ function bindTools() {
     e.target.value = "";
     if (!f) return;
     if (f.size > 2 * 1024 * 1024 * 1024) return notify("备份不能超过 2 GB");
+    let preview;
+    try {
+      const response = await fetch("/api/restore-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/zip",
+          "X-TaskBoard": capability,
+        },
+        body: f,
+      });
+      preview = await response.json();
+      if (!response.ok) throw new Error(preview.error);
+    } catch (err) {
+      report(err);
+      return;
+    }
     if (
       !(await confirmAction(
-        "将用备份替换当前数据库和附件。系统会先自动保存恢复前副本。",
+        `备份日期：${preview.modified}；任务 ${preview.tasks} 项；附件 ${preview.attachments} 个；解压大小 ${(preview.bytes / 1024 / 1024).toFixed(1)} MB。\n将替换当前数据；系统先保存恢复前完整副本。`,
         "恢复完整备份？",
         "校验并恢复",
       ))
@@ -994,6 +1081,7 @@ function bindTools() {
       query = state.view_state.query || "";
       tagFilter = state.view_state.tag_filter || "";
       render();
+      await loadDrafts();
       notify("恢复完成；恢复前副本：" + r.safety);
     } catch (err) {
       report(err);
@@ -1089,6 +1177,7 @@ document.addEventListener("keydown", (e) => {
     closeDrawer();
   }
 });
+initWorkspace();
 api("status")
   .then(async (status) => {
     if (!capability) {

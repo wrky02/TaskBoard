@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='taskboard-browser-') as tmp:
             page.click('#dueButton');page.click('[data-offset="0"]')
             expect(page.locator('#taskDue')).to_have_value(date.today().isoformat())
             page.click('#dueButton');page.screenshot(path=str(ARTIFACTS/'date-picker.png'));page.click('#dateClose')
-            page.fill('#checkInput','核对需求');page.click('#addCheck');page.locator('[data-check]').check()
+            page.fill('#checkInput','核对需求');page.click('#addCheck');page.locator('[data-check]').check();page.click('#dialogCancel')
             page.fill('#milestoneInput','完成评审');page.click('#addMilestone');page.locator('[data-milestone]').check()
             png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1cAAAAASUVORK5CYII=')
             page.set_input_files('#fileInput',{'name':'截图.png','mimeType':'image/png','buffer':png})
@@ -132,6 +132,8 @@ with tempfile.TemporaryDirectory(prefix='taskboard-browser-') as tmp:
             page.click('#newTask');page.click('#dueButton');page.screenshot(path=str(ARTIFACTS/'date-picker-mobile.png'))
             bounds=page.locator('#dateDialog').bounding_box();assert bounds['x']>=0 and bounds['x']+bounds['width']<=390
             page.keyboard.press('Escape');page.click('#cancelTask');expect(page.locator('#drawer')).to_be_hidden()
+            import browser_features
+            browser_features.run(page,context,origin,info["capability"],ARTIFACTS)
             assert not errors,errors
             # Re-launching the same data directory must reuse the instance.
             second=subprocess.run([sys.executable,str(HERE/'launcher.py'),'--no-browser','--data-root',str(root)],capture_output=True,timeout=10)

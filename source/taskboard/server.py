@@ -20,8 +20,9 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlsplit, parse_qs, quote
 import storage as store
+import features
 
-VERSION = '2.0.1'
+VERSION = '2.1.0'
 WEB = Path(__file__).resolve().parent / 'web'
 
 
@@ -41,16 +42,21 @@ def snapshot(db):
     tagmap = {t['id']: t['name'] for t in store.tags(db)}
     def view(t):
         result = dict(t)
+        result['options'] = features.options(db,t['id'])
+        result['dependencies'] = features.dependencies(db,t['id'])
+        result['blocked'] = features.blocked(db,t['id'])
         result['note'] = PlainNotes.convert(t['body'])
-        result['tags'] = [{'id': i, 'name': tagmap[i]} for i in store.task_tag_ids(db, t['id']) if i in tagmap]
-        result['files'] = [{**dict(f), 'url': '/api/file?id=' + str(f['id'])} for f in store.attachments(db, t['id'])]
+        result['tags'] = [{'id': i, 'name': tagmap[i], 'color':(db.execute('SELECT color FROM tag_colors WHERE tag_id=?',(i,)).fetchone() or ['purple'])[0]} for i in store.task_tag_ids(db, t['id']) if i in tagmap]
+        result['files'] = [{**dict(f), 'size': (store.FILES/f['stored_name']).stat().st_size if (store.FILES/f['stored_name']).is_file() else 0, 'url': '/api/file?id=' + str(f['id'])} for f in store.attachments(db, t['id'])]
         result['checklist'] = [dict(c) for c in store.checklist_items(db, t['id'])]
         result['milestones'] = [dict(m) for m in store.milestones(db, t['id'])]
         return result
     return {'tasks': [view(t) for t in store.tasks(db)],
             'trash': [view(t) for t in store.tasks(db, trashed=True)],
             'archived': [view(t) for t in store.tasks(db, archived=True)],
-            'tags': [dict(t) for t in store.tags(db)],
+            'tags': [{**dict(t), 'color': (db.execute('SELECT color FROM tag_colors WHERE tag_id=?',(t['id'],)).fetchone() or ['purple'])[0], 'count':db.execute('SELECT COUNT(*) FROM task_tags WHERE tag_id=?',(t['id'],)).fetchone()[0]} for t in store.tags(db)],
+            'views':[{**dict(r),'filters':json.loads(r['data'])} for r in db.execute('SELECT * FROM saved_views ORDER BY name')],
+            'info':features.backup_info(db),
             'activity': [dict(a) for a in store.activity(db, 300)],
             'names': store.get_display_names(db), 'view_state': store.get_board_view_state(db),
             'reminder_mode': store.get_reminder_mode(db), 'today': date.today().isoformat(), 'version': VERSION}
@@ -115,11 +121,16 @@ def save_draft(db, item):
         with db:
             rank = old['sort_order'] if old and old['status'] == status else db.execute('SELECT COALESCE(MAX(sort_order),0)+1000 FROM tasks WHERE status=?', (status,)).fetchone()[0]
             if tid:
+                features.save_options(db,tid,item.get('options'),item.get('dependencies',[r['id'] for r in features.dependencies(db,tid)]),due)
+                features.validate_completion(db,tid,status)
                 db.execute('UPDATE tasks SET title=?,body=?,status=?,due_date=?,sort_order=?,updated_at=? WHERE id=?',
                            (title, item.get('note', ''), status, due, rank, stamp, tid))
             else:
                 tid = db.execute('INSERT INTO tasks(title,body,status,due_date,created_at,updated_at,sort_order) VALUES(?,?,?,?,?,?,?)',
                                  (title, item.get('note', ''), status, due, stamp, stamp, rank)).lastrowid
+            if not old:
+                features.save_options(db,tid,item.get('options'),item.get('dependencies',[]),due)
+                features.validate_completion(db,tid,status)
             store._replace_tags(db, tid, tag_ids)
             db.execute('DELETE FROM checklist_items WHERE task_id=?', (tid,))
             db.executemany('INSERT INTO checklist_items(task_id,label,done,sort_order) VALUES(?,?,?,?)',
@@ -140,6 +151,7 @@ def save_draft(db, item):
                 is_image = Path(name).suffix.lower() in {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
                 db.execute('INSERT INTO attachments(task_id,filename,stored_name,is_image,created_at) VALUES(?,?,?,?,?)',
                            (tid, name, stored, int(is_image), stamp))
+            features.completed(db,tid,old['status'] if old else None)
             store._event(db, tid, title, '编辑任务' if old else '创建任务', '内容、检查清单、里程碑与附件一并保存')
     except Exception:
         for path, _, _ in staged: path.unlink(missing_ok=True)
@@ -156,6 +168,7 @@ class TaskServer(HTTPServer):
     allow_reuse_address = False
     def __init__(self, address=('127.0.0.1', 0)):
         if address[0] != '127.0.0.1': raise ValueError('仅允许监听回环地址')
+        self.desktop = None
         self.capability = secrets.token_urlsafe(32)
         self.sessions = {}
         self.failures = 0
@@ -191,9 +204,16 @@ class Handler(BaseHTTPRequestHandler):
             path = urlsplit(self.path).path
             if self.command == 'GET' and path == '/favicon.ico':
                 return self.respond(200, content=(WEB.parent / 'taskboard.ico').read_bytes(), mime='image/x-icon')
-            if self.command == 'GET' and path in {'/', '/app.js', '/date-picker.js', '/style.css'}:
-                name = {'/': 'index.html', '/app.js': 'app.js', '/date-picker.js': 'date-picker.js', '/style.css': 'style.css'}[path]
-                return self.respond(200, content=(WEB / name).read_bytes(), mime={'/':'text/html', '/app.js':'text/javascript', '/date-picker.js':'text/javascript', '/style.css':'text/css'}[path] + '; charset=utf-8')
+            if self.command == 'GET' and path in {'/', '/app.js', '/date-picker.js', '/workspace.js', '/brand.svg', '/style.css'}:
+                name = {'/': 'index.html', '/app.js': 'app.js', '/date-picker.js': 'date-picker.js', '/workspace.js':'workspace.js','/brand.svg':'brand.svg', '/style.css': 'style.css'}[path]
+                return self.respond(200, content=(WEB / name).read_bytes(), mime={'/':'text/html', '/app.js':'text/javascript', '/date-picker.js':'text/javascript','/workspace.js':'text/javascript','/brand.svg':'image/svg+xml', '/style.css':'text/css'}[path] + '; charset=utf-8')
+            if self.command=='POST' and path=='/api/window':
+                if self.headers.get('Origin')!=self.server.origin or not hmac.compare_digest(self.headers.get('X-TaskBoard',''),self.server.capability):return self.respond(403,{'error':'启动凭据无效'})
+                if self.server.desktop:self.server.desktop.open()
+                else:
+                    import webbrowser
+                    webbrowser.open(self.server.launch_url)
+                return self.respond(200,{'ok':True})
             jar = cookies.SimpleCookie()
             jar.load(self.headers.get('Cookie', ''))
             cookie_name = 'tb_session_' + str(self.server.server_port)
@@ -205,7 +225,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get('Origin') != self.server.origin or not hmac.compare_digest(self.headers.get('X-TaskBoard', ''), self.server.capability):
                     return self.respond(403, {'error': '请求来源无效，请从程序入口打开'})
                 length = int(self.headers.get('Content-Length', '0'))
-                binary_restore = path == '/api/restore' and self.headers.get('Content-Type') == 'application/zip'
+                binary_restore = path in {'/api/restore','/api/restore-preview'} and self.headers.get('Content-Type') == 'application/zip'
                 limit = store.MAX_BACKUP_FILE if binary_restore else 145 * 1024 * 1024
                 if length < 0 or length > limit:
                     return self.respond(413, {'error': '上传文件超过大小限制'})
@@ -257,6 +277,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200, {'ok': True})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
+            if path == '/api/reminder':
+                features.acknowledge(db,item)
+                return self.respond(200,{'reminders':features.reminders(db),'today':date.today().isoformat()})
+            if path == '/api/draft':
+                features.save_draft(db,item)
+                return self.respond(200,{'ok':True})
             if path == '/api/task/save': save_draft(db, item)
             elif path == '/api/task/action':
                 actions = {'move': lambda: store.move(db, int(item['id']), item['status'], item.get('index')),
@@ -268,23 +294,44 @@ class Handler(BaseHTTPRequestHandler):
                            'unarchive': lambda: store.unarchive_task(db, int(item['id']))}
                 action = actions.get(item.get('action'))
                 if not action: raise ValueError('操作无效')
+                before=features.undo_record(db,int(item['id'])) if item.get('action') in {'move','trash','archive'} else None
                 action()
+                if before:
+                    undo=features.make_undo(db,before)
+                    return self.respond(200,{**snapshot(db),'undo':undo})
+            elif path == '/api/undo':features.undo(db,item['key'])
+            elif path == '/api/saved-view':features.save_view(db,item)
             elif path == '/api/tag':
                 action = item.get('action')
                 if action == 'create': store.add_tag(db, item['name'])
                 elif action == 'rename': store.rename_tag(db, int(item['id']), item['name'])
                 elif action == 'delete': store.delete_tag(db, int(item['id']))
+                elif action in {'color','merge'}:features.tag_update(db,item)
                 else: raise ValueError('标签操作无效')
             elif path == '/api/bulk':
                 ids = [int(i) for i in item['ids']]
                 if item['action'] == 'status': result = store.bulk_update_status(db, ids, item['status'])
                 elif item['action'] == 'tag': result = store.bulk_add_tag(db, ids, item['tag'])
                 elif item['action'] == 'trash': result = store.bulk_trash(db, ids)
+                elif item['action']=='edit':
+                    result={'ok':[],'failed':[]}
+                    for tid in ids:
+                        try:
+                            current=next(t for t in snapshot(db)['tasks'] if t['id']==tid)
+                            changes=item['changes']; payload={**current,'due':current['due_date'],'tags':[t['id'] for t in current['tags']],'dependencies':[t['id'] for t in current['dependencies']]}
+                            for key in ('due','status','tags'):
+                                if key in changes:payload[key]=changes[key]
+                            if 'priority' in changes:payload['options']={**current['options'],'priority':changes['priority']}
+                            save_draft(db,payload);result['ok'].append(tid)
+                        except (ValueError,KeyError,StopIteration) as exc:result['failed'].append({'id':tid,'error':str(exc)})
                 else: raise ValueError('批量操作无效')
                 return self.respond(200, {'result': result, 'state': snapshot(db)})
             elif path == '/api/settings':
                 store.set_display_names(db, item['system_name'], item['user_name'])
                 store.set_reminder_mode(db, item['reminder_mode'])
+                behavior=item.get('close_behavior','ask')
+                if behavior not in ('ask','exit','tray'):raise ValueError('关闭行为无效')
+                with db:db.execute("INSERT OR REPLACE INTO settings VALUES ('close_behavior',?)",(behavior,))
             elif path == '/api/view':
                 store.set_board_view_state(db, item.get('tag_filter'), item.get('query'))
                 return self.respond(200, {'ok': True})
@@ -293,6 +340,19 @@ class Handler(BaseHTTPRequestHandler):
                 if item['new'] != item['confirm']: raise ValueError('两次密码不一致')
                 store.set_password(db, item['new'])
                 self.server.sessions = {sid: time.time() + 12 * 3600}
+            elif path in {'/api/migration-preview','/api/migration-import'}:
+                import tempfile
+                fd,filename=tempfile.mkstemp(prefix='migration-',suffix='.zip',dir=store.ROOT);os.close(fd);upload_path=Path(filename)
+                preview=features.directory_backup(item['files'],upload_path)
+                if path=='/api/migration-preview':return self.respond(200,preview)
+                try:fresh,safety=store.restore_backup(db,upload_path)
+                except Exception:
+                    db.close();db=store.connect();raise
+                db=fresh;self.server.sessions={sid:time.time()+12*3600}
+                return self.respond(200,{'state':snapshot(db),'safety':safety.name})
+            elif path == '/api/restore-preview':
+                if upload_path is None:raise ValueError('请选择完整 ZIP 备份')
+                return self.respond(200,features.preview_backup(upload_path))
             elif path == '/api/restore':
                 if upload_path is None: raise ValueError('请选择完整 ZIP 备份')
                 try: fresh, safety = store.restore_backup(db, upload_path)
@@ -317,6 +377,14 @@ class Handler(BaseHTTPRequestHandler):
             if db is not None: db.close()
             if upload_path is not None: upload_path.unlink(missing_ok=True)
     def read_api(self, path, db):
+        if path == '/api/reminders':return self.respond(200,{'reminders':features.reminders(db),'today':date.today().isoformat()})
+        if path == '/api/diagnostics':return self.respond(200,features.diagnostics(db),headers={'Content-Disposition':'attachment; filename=TaskBoard-diagnostics.json'})
+        if path == '/api/drafts':return self.respond(200,{'drafts':[{'id':r['id'],'updated':r['updated'],'title':json.loads(r['data']).get('title','')} for r in db.execute('SELECT * FROM drafts ORDER BY updated DESC')]})
+        if path == '/api/draft':
+            key=parse_qs(urlsplit(self.path).query).get('key',[''])[0]
+            row=db.execute('SELECT data FROM drafts WHERE id=?',(key,)).fetchone()
+            if not row:raise ValueError('草稿不存在')
+            return self.respond(200,{'draft':json.loads(row[0])})
         if path == '/api/state': return self.respond(200, snapshot(db))
         if path == '/api/health': return self.respond(200, store.attachment_health_check(db))
         if path == '/api/file':

@@ -9,7 +9,7 @@ $Python = (Resolve-Path '.build-venv\Scripts\python.exe').Path
 if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
 Push-Location source\taskboard
 try {
-    & $Python -m unittest -v test_server test_startup_data
+    & $Python -m unittest -v test_server test_startup_data test_features
     if ($LASTEXITCODE -ne 0) { throw 'Regression tests failed' }
     & $Python test_storage_v13.py
     if ($LASTEXITCODE -ne 0) { throw 'Storage regression failed' }
@@ -24,4 +24,4 @@ if (-not $Compiler) { $Compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup
 if (-not (Test-Path $Compiler)) { throw 'Install Inno Setup 6 and add ISCC.exe to PATH.' }
 & $Compiler source\installer\TaskBoard.iss
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
-Get-FileHash dist\Setup_TaskBoard_2.0.1.exe -Algorithm SHA256 | Format-List
+Get-FileHash dist\Setup_TaskBoard_2.1.0.exe -Algorithm SHA256 | Format-List

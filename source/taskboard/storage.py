@@ -39,7 +39,7 @@ MAX_FILE = 100 * 1024 * 1024
 MAX_BACKUP_FILE = 2 * 1024 * 1024 * 1024
 
 
-def now(): return datetime.now().isoformat(timespec='seconds')
+def now(): return datetime.now().isoformat(timespec='microseconds')
 
 
 def writable(path: Path) -> bool:
@@ -244,6 +244,12 @@ def connect():
             for rank, row in enumerate(rows, 1):
                 db.execute('UPDATE tasks SET sort_order=? WHERE id=?', (rank * 1000, row['id']))
     db.commit()
+    try:
+        import features
+        features.migrate(db)
+    except Exception:
+        db.close()
+        raise
     return db
 
 
@@ -366,8 +372,10 @@ def save_task(db,title,body,status,due,tag_ids=(),task_id=None):
     if due: date.fromisoformat(due)
     old=task(db,task_id) if task_id is not None else None
     if task_id is not None and not old: raise ValueError('任务不存在')
+    import features
     with db:
         if old:
+            features.validate_completion(db,task_id,status)
             if old['status'] != status:
                 rank=(db.execute('SELECT COALESCE(MAX(sort_order),0) FROM tasks WHERE status=? AND deleted_at IS NULL',(status,)).fetchone()[0] or 0)+1000
             else:
@@ -380,6 +388,7 @@ def save_task(db,title,body,status,due,tag_ids=(),task_id=None):
             if old['title']!=title or old['body']!=body: changes.append('标题或备注已修改')
             _event(db,task_id,title,'编辑任务','；'.join(changes) or '标签/内容已保存')
             if old['status']!=status: _event(db,task_id,title,'状态变更',f"{old['status']} → {status}")
+            features.completed(db,task_id,old['status'])
             return task_id
         rank=(db.execute('SELECT COALESCE(MAX(sort_order),0) FROM tasks WHERE status=? AND deleted_at IS NULL',(status,)).fetchone()[0] or 0)+1000
         cur=db.execute('INSERT INTO tasks(title,body,status,due_date,created_at,updated_at,sort_order) VALUES (?,?,?,?,?,?,?)',(title,body,status,due,now(),now(),rank))
@@ -392,7 +401,9 @@ def move(db,task_id,target,index=None):
     old=task(db,task_id)
     if not old: raise ValueError('任务不存在')
     if old['archived_at']: raise ValueError('请先取消归档再调整任务阶段')
+    import features
     with db:
+        features.validate_completion(db,task_id,target)
         ids=[r['id'] for r in db.execute('SELECT id FROM tasks WHERE deleted_at IS NULL AND status=? ORDER BY sort_order,id DESC',(target,)) if r['id']!=task_id]
         index = len(ids) if index is None else max(0,min(int(index),len(ids)))
         ids.insert(index,int(task_id))
@@ -403,6 +414,7 @@ def move(db,task_id,target,index=None):
             db.execute('UPDATE tasks SET status=?,sort_order=?,updated_at=? WHERE id=?',(target,n*1000,now(),tid))
         if old['status']!=target: _event(db,task_id,old['title'],'状态变更',f"{old['status']} → {target}")
         else: _event(db,task_id,old['title'],'拖拽排序',f'{target} 第 {index+1} 位')
+        features.completed(db,task_id,old['status'])
     return ids
 
 def trash(db,task_id):
@@ -423,6 +435,7 @@ def restore_task(db,task_id):
 def erase(db,task_id):
     old=task(db,task_id,True)
     if not old or not old['deleted_at']: raise ValueError('只能彻底删除回收站中的任务')
+    if db.execute('SELECT 1 FROM task_dependencies WHERE prerequisite=?',(task_id,)).fetchone(): raise ValueError('其他任务仍依赖此任务，请先移除依赖')
     names=[r['stored_name'] for r in db.execute('SELECT stored_name FROM attachments WHERE task_id=?',(task_id,))]
     with db:
         db.execute('DELETE FROM tasks WHERE id=?',(task_id,))
@@ -439,6 +452,10 @@ def duplicate_task(db, task_id):
     tag_ids = task_tag_ids(db, task_id)
     with db:
         new_id = save_task(db, old['title'] + '（副本）', old['body'], '计划中', old['due_date'], tag_ids)
+        import features
+        copied=features.options(db,task_id);copied.update(repeat='off',today='',snooze=0,acknowledged='')
+        features.put_options(db,new_id,copied)
+        db.execute('INSERT INTO task_dependencies SELECT ?,prerequisite FROM task_dependencies WHERE task_id=?',(new_id,task_id))
         for item in db.execute('SELECT label,sort_order FROM checklist_items WHERE task_id=? ORDER BY sort_order', (task_id,)):
             db.execute('INSERT INTO checklist_items(task_id,label,sort_order) VALUES (?,?,?)', (new_id, item['label'], item['sort_order']))
         _event(db, new_id, old['title'] + '（副本）', '复制任务', f'来源任务 #{task_id}')
