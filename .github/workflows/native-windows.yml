@@ -1,0 +1,141 @@
+name: Native Windows installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [build/native-windows]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PYTHONUTF8: '1'
+      SIGNING_ENABLED: ${{ vars.TASKBOARD_SIGNING_ENABLED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Build self-contained native desktop and private data engine
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          try {
+            ./scripts/build-native.ps1 -SkipInstaller *> artifacts/native-build.log
+            if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
+          } catch {
+            python scripts/report-ci.py artifacts/native-build.log 'Native build'
+            throw
+          }
+      - name: Authenticate approved signing identity using OIDC
+        if: env.SIGNING_ENABLED == 'true'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SIGNING_SUBSCRIPTION_ID }}
+      - name: Stage first-party binaries for signing
+        if: env.SIGNING_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force signing-input | Out-Null
+          Copy-Item dist/TaskBoardNative/TaskBoard.exe,dist/TaskBoardNative/TaskBoard.dll,dist/TaskBoardNative/engine/TaskBoard.Engine.exe signing-input/
+      - name: Sign native application and data engine
+        if: env.SIGNING_ENABLED == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\signing-input
+          files-folder-filter: exe,dll
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Verify and install signed binaries into package
+        if: env.SIGNING_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          ./scripts/verify-signatures.ps1 -Paths signing-input/TaskBoard.exe,signing-input/TaskBoard.dll,signing-input/TaskBoard.Engine.exe
+          Copy-Item signing-input/TaskBoard.exe,signing-input/TaskBoard.dll dist/TaskBoardNative/ -Force
+          Copy-Item signing-input/TaskBoard.Engine.exe dist/TaskBoardNative/engine/ -Force
+      - name: Compile installer
+        shell: pwsh
+        run: ./scripts/compile-native-installer.ps1
+      - name: Sign installer
+        if: env.SIGNING_ENABLED == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Verify installer signature and record signing status
+        shell: pwsh
+        run: |
+          if ($env:SIGNING_ENABLED -eq 'true') {
+            ./scripts/verify-signatures.ps1 -Paths dist/Setup_TaskBoard_3.0.0.exe
+            'SIGNED: verified Authenticode chain and RFC3161 timestamp.' | Set-Content dist/SIGNING-STATUS.txt
+          } else {
+            'UNSIGNED: no trusted signing identity configured. Publisher metadata wrky02 does not imply a verified signer.' | Set-Content dist/SIGNING-STATUS.txt
+            Write-Output '::notice title=Code signing::Unsigned build: no trusted signing identity configured. See docs/CODE-SIGNING.md.'
+          }
+          (Get-FileHash dist/Setup_TaskBoard_3.0.0.exe -Algorithm SHA256).Hash.ToLower() + '  Setup_TaskBoard_3.0.0.exe' | Set-Content dist/SHA256SUMS.txt
+      - name: Install and exercise actual native controls
+        shell: pwsh
+        run: |
+          try {
+            $ErrorActionPreference='Stop'
+            python -m pip install pywinauto==0.6.9 psutil==7.1.0 Pillow==11.3.0
+            if ($LASTEXITCODE -ne 0) { throw 'UI automation dependencies failed' }
+            $install=Join-Path $env:RUNNER_TEMP 'TaskBoard-native-install'
+            $p=Start-Process dist/Setup_TaskBoard_3.0.0.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw 'Native installation failed' }
+            $company=(Get-Item dist/Setup_TaskBoard_3.0.0.exe).VersionInfo.CompanyName
+            if ($company.Trim() -ne 'wrky02') { throw 'Incorrect publisher metadata' }
+            $entry=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{A71D03F1-966D-49D2-A264-39F7BD20E097}_is1'
+            if (([string]$entry.Publisher).Trim() -ne 'wrky02') { throw 'Incorrect installed publisher' }
+            # Prove the published app is self-contained, regardless of runner SDKs.
+            $env:DOTNET_ROOT=Join-Path $env:RUNNER_TEMP 'no-dotnet-here'
+            $env:DOTNET_MULTILEVEL_LOOKUP='0'
+            python scripts/check-native.py "$install/TaskBoard.exe" "$install/Data" *> artifacts/native-ui.log
+            if ($LASTEXITCODE -ne 0) {
+              python scripts/report-ci.py artifacts/native-ui.log 'Native UI acceptance'
+              throw 'Installed native UI acceptance failed'
+            }
+            Get-Content artifacts/native-ui.log
+            $before=@{}
+            Get-ChildItem "$install/Data" -File -Recurse | ForEach-Object { $before[$_.FullName]=(Get-FileHash $_.FullName -Algorithm SHA256).Hash }
+            $p=Start-Process "$install/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw 'Uninstall failed' }
+            foreach ($path in $before.Keys) {
+              if (-not (Test-Path $path) -or (Get-FileHash $path -Algorithm SHA256).Hash -ne $before[$path]) { throw 'Uninstall changed user data' }
+            }
+            Write-Output '::notice title=Native install acceptance::PASS: self-contained installation, publisher metadata and uninstall preserves every data file'
+          } catch {
+            Write-Output ('::error title=Native install::'+$_.Exception.Message.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A'))
+            throw
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TaskBoard-Native-diagnostics
+          path: artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TaskBoard-Native-Windows-3.0.0
+          path: |
+            dist/Setup_TaskBoard_3.0.0.exe
+            dist/SHA256SUMS.txt
+            dist/SIGNING-STATUS.txt

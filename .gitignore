@@ -9,3 +9,6 @@ artifacts/
 *.spec
 
 .test-venv/
+native/**/bin/
+native/**/obj/
+.native-build-venv/
