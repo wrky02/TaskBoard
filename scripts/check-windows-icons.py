@@ -111,6 +111,13 @@ with tempfile.TemporaryDirectory(prefix='taskboard-native-icons-', ignore_cleanu
                 if not all(handles): continue
                 actual = [pixels(handle, size) for handle, size in zip(handles, (16, 32))]
                 differences = [round(sum(abs(a-b) for a,b in zip(x,y))/len(x), 2) for x,y in zip(expected, actual)]
+                # Edge app mode can scale its 16px favicon into the large HWND
+                # icon. Accept that same ICO frame rendered at 32px as well.
+                # Captured native bitmaps established this behavior on Edge;
+                # requiring the distinct 32px ICO frame would reject the correct logo.
+                scaled = pixels(references[0], 32)
+                scaled_difference = round(sum(abs(a-b) for a,b in zip(scaled, actual[1]))/len(scaled), 2)
+                differences[1] = min(differences[1], scaled_difference)
                 if max(differences) <= 12:
                     print(f'::notice title=Native window icons::PASS: small and large Edge app icons match TaskBoard ICO; mean pixel differences {differences}')
                     break
