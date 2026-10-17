@@ -73,6 +73,12 @@ jobs:
           if ($entry.Publisher -ne 'wrky02' -or $entry.URLInfoAbout -ne 'https://github.com/wrky02') { throw 'Installed publisher metadata is incorrect' }
           .build-venv\Scripts\python.exe scripts\smoke-packaged.py "$install\TaskBoard.exe" "$install\Data"
           if ($LASTEXITCODE -ne 0) { throw 'Installed application smoke test failed' }
+          .test-venv\Scripts\python.exe scripts\check-desktop.py "$install\TaskBoard.exe" *> artifacts/installed-desktop.log
+          if ($LASTEXITCODE -ne 0) {
+            .test-venv\Scripts\python.exe scripts\report-ci.py artifacts/installed-desktop.log 'Installed desktop'
+            throw 'Installed desktop acceptance failed'
+          }
+          Get-Content artifacts/installed-desktop.log
           $before = @{}
           Get-ChildItem "$install\Data" -File -Recurse | ForEach-Object { $before[$_.FullName] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
           $uninstall = Start-Process -FilePath "$install\unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru

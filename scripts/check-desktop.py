@@ -45,7 +45,8 @@ with tempfile.TemporaryDirectory(prefix='TaskBoard-desktop-test-',ignore_cleanup
     db=storage.connect()
     with db:db.execute("INSERT OR REPLACE INTO settings VALUES ('close_behavior','tray')")
     db.close()
-    process=subprocess.Popen([sys.executable,str(ROOT/'source/taskboard/launcher.py'),'--data-root',str(root/'Data')])
+    command=[str(Path(sys.argv[1]).resolve())] if len(sys.argv)>1 else [sys.executable,str(ROOT/'source/taskboard/launcher.py')]
+    process=subprocess.Popen([*command,'--data-root',str(root/'Data')])
     client=build_opener(HTTPCookieProcessor(CookieJar()))
     try:
         wait_for(lambda:(root/'Data/.instance.json').exists(),'No launch metadata')
