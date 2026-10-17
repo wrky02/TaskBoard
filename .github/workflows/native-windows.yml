@@ -3,6 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [build/native-windows]
+concurrency:
+  group: native-windows-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

@@ -49,7 +49,7 @@ def db_scalar(sql):
 
 def mainwindow():return Desktop(backend='uia').window(process=process.pid,title_re='任务看板系统.*',control_type='Window')
 def control(win,id):
-    result=win.child_window(auto_id=id);result.wait('visible enabled',timeout=30);return result.wrapper_object()
+    result=win.child_window(auto_id=id);result.wait('exists enabled',timeout=30);return result.wrapper_object()
 def click(win,id):control(win,id).invoke()
 def text(win,id,value):control(win,id).set_edit_text(value)
 def dialog(title):
@@ -89,6 +89,8 @@ try:
         assert db.execute('SELECT COUNT(*) FROM checklist_items').fetchone()[0]==1
         attachment=db.execute('SELECT stored_name FROM attachments').fetchone()[0]
         assert (root/'attachments'/attachment).read_bytes().startswith(b'\x89PNG')
+    # Closing an unchanged editor must not re-enter WPF's Closing event.
+    click(win,'task-1');unchanged=dialog('编辑任务');click(unchanged,'closeEditor');until(lambda:not unchanged.exists())
     # Exercise lock/re-unlock using native password controls.
     click(win,'lock');control(win,'loginPassword').type_keys('native-test-password',with_spaces=True);click(win,'login');control(win,'quickTitle')
     # Real installed icon and WPF class, not Edge app mode.
