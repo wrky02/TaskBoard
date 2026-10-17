@@ -1,0 +1,21 @@
+name: Installer metadata diagnostic
+on:
+  push:
+    branches: [build/publisher-check]
+jobs:
+  metadata:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect compiler metadata
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist\TaskBoard | Out-Null
+          Set-Content dist\TaskBoard\TaskBoard.exe 'Metadata fixture only, never distributed'
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" source\installer\TaskBoard.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Metadata fixture compilation failed' }
+          $path = (Resolve-Path 'dist\Setup_TaskBoard_2.1.0.exe').Path
+          $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($path)
+          $detail = @{Company=$info.CompanyName; Product=$info.ProductName; Description=$info.FileDescription; Version=$info.FileVersion; Language=$info.Language} | ConvertTo-Json -Compress
+          Write-Output "::notice title=Installer version metadata::$detail"
