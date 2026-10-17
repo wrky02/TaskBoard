@@ -24,8 +24,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Browser installation failed' }
           Push-Location source\taskboard
           try {
-            ..\..\.test-venv\Scripts\python.exe test_browser.py
-            if ($LASTEXITCODE -ne 0) { throw 'Browser regression failed' }
+            New-Item -ItemType Directory -Force -Path ..\..\artifacts | Out-Null
+            ..\..\.test-venv\Scripts\python.exe test_browser.py *> ..\..\artifacts\browser-test.log
+            $testExit = $LASTEXITCODE
+            if ($testExit -ne 0) {
+              ..\..\.test-venv\Scripts\python.exe ..\..\scripts\report-ci.py ..\..\artifacts\browser-test.log
+              throw 'Browser regression failed; see annotation and diagnostic artifact'
+            }
           } finally { Pop-Location }
       - name: Build and smoke-test EXE and installer
         shell: pwsh
@@ -44,6 +49,11 @@ jobs:
           $uninstall = Start-Process -FilePath "$install\unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw 'Uninstall failed' }
           if (-not (Test-Path "$install\Data\preserve.txt")) { throw 'Uninstall removed user data' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TaskBoard-Windows-diagnostics
+          path: artifacts/
       - uses: actions/upload-artifact@v4
         with:
           name: TaskBoard-Windows-2.0.0

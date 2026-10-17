@@ -191,7 +191,7 @@ class Handler(BaseHTTPRequestHandler):
             path = urlsplit(self.path).path
             if self.command == 'GET' and path in {'/', '/app.js', '/style.css'}:
                 name = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[path]
-                return self.respond(200, content=(WEB / name).read_bytes(), mime=mimetypes.guess_type(name)[0] + '; charset=utf-8')
+                return self.respond(200, content=(WEB / name).read_bytes(), mime={'/':'text/html', '/app.js':'text/javascript', '/style.css':'text/css'}[path] + '; charset=utf-8')
             jar = cookies.SimpleCookie()
             jar.load(self.headers.get('Cookie', ''))
             cookie_name = 'tb_session_' + str(self.server.server_port)
