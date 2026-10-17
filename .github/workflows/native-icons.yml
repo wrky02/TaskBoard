@@ -1,0 +1,17 @@
+name: Native icon diagnostics
+on:
+  push:
+    branches: [build/icon-verification]
+jobs:
+  verify:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.lock
+      - run: python scripts/check-windows-icons.py

@@ -8,6 +8,9 @@ import subprocess
 import sys
 import tempfile
 import time
+import base64
+import struct
+import zlib
 
 ROOT = Path(__file__).resolve().parent.parent
 user = c.WinDLL('user32', use_last_error=True)
@@ -69,6 +72,16 @@ def window_icons():
     user.EnumWindows(visit, 0)
     return found
 
+def png(data, size):
+    def chunk(kind, value):
+        return struct.pack('>I', len(value)) + kind + value + struct.pack('>I', zlib.crc32(kind + value))
+    rgba = bytearray()
+    for offset in range(0, len(data), 4):
+        b, g, r, a = data[offset:offset+4]
+        rgba.extend((r, g, b, 255))
+    rows = b''.join(b'\0'+rgba[i:i+size*4] for i in range(0, len(rgba), size*4))
+    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',size,size,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(rows))+chunk(b'IEND',b'')
+
 edge = next((Path(base) / 'Microsoft/Edge/Application/msedge.exe'
              for base in (os.environ.get('PROGRAMFILES(X86)'), os.environ.get('PROGRAMFILES'), os.environ.get('LOCALAPPDATA'))
              if base and (Path(base) / 'Microsoft/Edge/Application/msedge.exe').exists()), None)
@@ -105,6 +118,11 @@ with tempfile.TemporaryDirectory(prefix='taskboard-native-icons-', ignore_cleanu
                 time.sleep(.5); continue
             break
         else:
+            if differences:
+                for name, data, size in [('expected-large', expected[1], 32), ('actual-large', actual[1], 32), ('actual-small', actual[0], 16)]:
+                    print(f'::notice title={name}::'+base64.b64encode(png(data, size)).decode())
+                small_large = pixels(handles[1], 16)
+                print('::notice title=Large icon normalized::'+str(round(sum(abs(a-b) for a,b in zip(expected[0], small_large))/len(small_large), 2)))
             raise AssertionError(f'Native app icons did not match TaskBoard ICO; differences={differences}')
     finally:
         for handle in references: user.DestroyIcon(handle)
