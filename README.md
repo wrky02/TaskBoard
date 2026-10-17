@@ -84,4 +84,4 @@ GitHub Actions 的 `Windows installer` 工作流可手动运行；推送到 `bui
 - 登录 GitHub 后，在 Artifacts 下载 `TaskBoard-Windows-2.0.0`，解压运行 `Setup_TaskBoard_2.0.0.exe`。
 - 构建源码提交：`e2cb5e1`；产物 ZIP 摘要：`1107064e1c884479fba2a1e61797168b4d418dc19a08fb43b3b4e22016daa69c`。
 
-已验证 Linux 源码/冻结程序及 Windows CI 的浏览器、EXE、安装/卸载流程。真实 Windows 中文输入法、窗口/任务栏、多显示器及旧安装升级仍待验收，不宣称闪烁已修复。未设置发布者名称，也未做代码签名，Windows 可能提示未知发布者。
+已验证 Linux 源码/冻结程序及 Windows CI 的浏览器、EXE、安装/卸载流程。真实 Windows 中文输入法、窗口/任务栏、多显示器及旧安装升级仍待验收，不宣称闪烁已修复。后续构建的安装信息与安装器文件属性使用发布者 `wrky02`，发布者网站为 https://github.com/wrky02 。安装包尚未做代码签名，Windows 安全提示仍可能显示“未知发布者”；填写发布者名称不会自动获得已验证签名。

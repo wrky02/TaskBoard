@@ -6,6 +6,9 @@
 AppId={{A71D03F1-966D-49D2-A264-39F7BD20E097}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppPublisher=wrky02
+AppPublisherURL=https://github.com/wrky02
+VersionInfoCompany=wrky02
 DefaultDirName={localappdata}\Programs\TaskBoard
 DefaultGroupName=任务看板系统
 OutputDir=..\..\dist
