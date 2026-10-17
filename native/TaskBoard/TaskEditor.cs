@@ -36,7 +36,7 @@ internal sealed class TaskEditor : Window
     bool finished,savingDraft,loading=true,busy,readOnly;
     public TaskEditor(BoardWindow owner,JsonObject? task,JsonObject? restored=null,string? key=null)
     {
-        board=owner;Owner=owner;Title=task is null?"新建任务":"编辑任务";Width=800;Height=850;MinWidth=650;MinHeight=550;WindowStartupLocation=WindowStartupLocation.CenterOwner;Background=Ui.Surface;FontFamily=owner.FontFamily;FontSize=14;Icon=owner.Icon;
+        board=owner;Owner=owner;Title=task is null?"新建任务":"编辑任务";Width=Math.Min(800,SystemParameters.WorkArea.Width-24);Height=Math.Min(850,SystemParameters.WorkArea.Height-24);MinWidth=Math.Min(650,Width);MinHeight=Math.Min(550,Height);WindowStartupLocation=WindowStartupLocation.CenterOwner;Background=Ui.Surface;FontFamily=owner.FontFamily;FontSize=14;Icon=owner.Icon;
         original=task is null?new JsonObject():BoardWindow.Payload(task);
         var value=restored??original;
         draftKey=key??(task is null?"native-new-"+Guid.NewGuid().ToString("N"):"native-task-"+task.I("id"));
@@ -75,7 +75,7 @@ internal sealed class TaskEditor : Window
         PreviewKeyDown+=async(_,e)=>{if(e.Key==Key.V&&Keyboard.Modifiers.HasFlag(ModifierKeys.Control)&&Clipboard.ContainsImage()){e.Handled=true;try{await PasteImage();}catch(Exception ex){Ui.Error(ex.Message);}}};
         loading=false;initial=Collect().ToJsonString();lastDraft=restored is null?initial:"";
         draftTimer.Tick+=async(_,_)=>await SaveDraft();if(!readOnly)draftTimer.Start();
-        Closing+=async(_,e)=>{if(finished||readOnly)return;e.Cancel=true;if(busy)return;busy=true;try{await SaveDraft(true);finished=true;Dispatcher.BeginInvoke(Close);}catch(Exception ex){Ui.Error("草稿未能保存："+ex.Message);}finally{busy=false;}};
+        Closing+=async(_,e)=>{if(finished||readOnly)return;e.Cancel=true;if(busy)return;busy=true;try{await SaveDraft(true);finished=true;_ = Dispatcher.BeginInvoke(Close);}catch(Exception ex){Ui.Error("草稿未能保存："+ex.Message);}finally{busy=false;}};
         Closed+=(_,_)=>draftTimer.Stop();Loaded+=(_,_)=>title.Focus();
     }
     UIElement History(int id){var p=new StackPanel();foreach(var a in board.State.A("activity").Where(a=>a.I("task_id")==id))p.Children.Add(Ui.Text(a.S("at")+"  "+a.S("action")+"  "+a.S("detail"),12,Ui.Muted));return p;}

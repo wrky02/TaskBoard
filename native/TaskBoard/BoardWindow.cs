@@ -36,7 +36,7 @@ internal sealed partial class BoardWindow : Window
     internal static readonly string[] Priorities={"紧急","高","普通","低"};
     public BoardWindow(Rpc engine)
     {
-        rpc=engine;Title="任务看板系统 · 3.0";Width=1360;Height=900;MinWidth=980;MinHeight=650;
+        rpc=engine;Title="任务看板系统 · 3.0";Width=Math.Min(1360,SystemParameters.WorkArea.Width-24);Height=Math.Min(900,SystemParameters.WorkArea.Height-24);MinWidth=Math.Min(900,Width);MinHeight=Math.Min(600,Height);
         WindowStartupLocation=WindowStartupLocation.CenterScreen;Background=Ui.Surface;FontFamily=new FontFamily("Microsoft YaHei UI");FontSize=14;
         Icon=BitmapFrame.Create(new Uri("pack://application:,,,/taskboard.ico"));
         tray=new Forms.NotifyIcon{Icon=new System.Drawing.Icon(Application.GetResourceStream(new Uri("pack://application:,,,/taskboard.ico")).Stream),Text="任务看板系统",Visible=true};

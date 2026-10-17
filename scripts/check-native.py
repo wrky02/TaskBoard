@@ -92,7 +92,7 @@ try:
     # Exercise lock/re-unlock using native password controls.
     click(win,'lock');control(win,'loginPassword').type_keys('native-test-password',with_spaces=True);click(win,'login');control(win,'quickTitle')
     # Real installed icon and WPF class, not Edge app mode.
-    assert 'HwndWrapper' in win.wrapper_object().class_name(),win.wrapper_object().class_name()
+    assert 'HwndWrapper' in Desktop(backend='win32').window(handle=win.handle).class_name()
     screenshot=win.wrapper_object().capture_as_image();screenshot.save(artifacts/'native-board.png')
     preview=screenshot.convert('RGB');preview.thumbnail((1000,700));stream=io.BytesIO();preview.save(stream,format='JPEG',quality=55)
     print('::notice title=Native screenshot::'+base64.b64encode(stream.getvalue()).decode())

@@ -33,7 +33,7 @@ internal static class Ui
     }
     public static CheckBox Check(string text,bool value=false)=>new(){Content=text,IsChecked=value,Margin=new Thickness(0,6,10,6),VerticalContentAlignment=VerticalAlignment.Center};
     public static Expander Section(string title,UIElement content,bool expanded=true)=>new(){Header=title,Content=content,IsExpanded=expanded,Margin=new Thickness(0,10,0,10),Padding=new Thickness(4)};
-    public static Window Dialog(Window owner,string title,UIElement content,double width=650,double height=550)=>new(){Owner=owner,Title=title,Content=Scroll(new Border{Padding=new Thickness(22),Child=content}),Width=width,Height=height,MinWidth=400,MinHeight=300,WindowStartupLocation=WindowStartupLocation.CenterOwner,Background=Surface,FontFamily=new FontFamily("Microsoft YaHei UI"),FontSize=14,Icon=owner.Icon};
+    public static Window Dialog(Window owner,string title,UIElement content,double width=650,double height=550)=>new(){Owner=owner,Title=title,Content=Scroll(new Border{Padding=new Thickness(22),Child=content}),Width=Math.Min(width,SystemParameters.WorkArea.Width-24),Height=Math.Min(height,SystemParameters.WorkArea.Height-24),MinWidth=400,MinHeight=300,WindowStartupLocation=WindowStartupLocation.CenterOwner,Background=Surface,FontFamily=new FontFamily("Microsoft YaHei UI"),FontSize=14,Icon=owner.Icon};
     public static string? Prompt(Window owner,string title,string initial="") {
         string? result=null;var input=Input(initial);Window? w=null;
         var ok=Button("确定",()=>{if(string.IsNullOrWhiteSpace(input.Text))return;result=input.Text.Trim();w!.DialogResult=true;},primary:true);ok.IsDefault=true;
