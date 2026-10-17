@@ -34,7 +34,14 @@ jobs:
           } finally { Pop-Location }
       - name: Build and smoke-test EXE and installer
         shell: pwsh
-        run: ./scripts/build-windows.ps1
+        run: |
+          $buildFailed = $false
+          try { ./scripts/build-windows.ps1 *> artifacts/build-test.log; if ($LASTEXITCODE -ne 0) { $buildFailed = $true } }
+          catch { $_ | Out-File -Append artifacts/build-test.log; $buildFailed = $true }
+          if ($buildFailed) {
+            .test-venv\Scripts\python.exe scripts\report-ci.py artifacts/build-test.log 'Windows build'
+            throw 'Windows build failed; see diagnostic annotation'
+          }
       - name: Test isolated install and uninstall preserve data
         shell: pwsh
         run: |

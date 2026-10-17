@@ -295,6 +295,9 @@ class Handler(BaseHTTPRequestHandler):
                 if upload_path is None: raise ValueError('请选择完整 ZIP 备份')
                 try: fresh, safety = store.restore_backup(db, upload_path)
                 except Exception:
+                    # Validation can fail before restore closes the old handle.
+                    # Always close it before reconnecting (Windows locks files).
+                    db.close()
                     db = store.connect()
                     raise
                 else: db = fresh
