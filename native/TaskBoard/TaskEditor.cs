@@ -75,7 +75,7 @@ internal sealed class TaskEditor : Window
         PreviewKeyDown+=async(_,e)=>{if(e.Key==Key.V&&Keyboard.Modifiers.HasFlag(ModifierKeys.Control)&&Clipboard.ContainsImage()){e.Handled=true;try{await PasteImage();}catch(Exception ex){Ui.Error(ex.Message);}}};
         loading=false;initial=Collect().ToJsonString();lastDraft=restored is null?initial:"";
         draftTimer.Tick+=async(_,_)=>await SaveDraft();if(!readOnly)draftTimer.Start();
-        Closing+=async(_,e)=>{if(finished||readOnly)return;e.Cancel=true;if(busy)return;busy=true;try{await SaveDraft(true);finished=true;Close();}catch(Exception ex){Ui.Error("草稿未能保存："+ex.Message);}finally{busy=false;}};
+        Closing+=async(_,e)=>{if(finished||readOnly)return;e.Cancel=true;if(busy)return;busy=true;try{await SaveDraft(true);finished=true;Dispatcher.BeginInvoke(Close);}catch(Exception ex){Ui.Error("草稿未能保存："+ex.Message);}finally{busy=false;}};
         Closed+=(_,_)=>draftTimer.Stop();Loaded+=(_,_)=>title.Focus();
     }
     UIElement History(int id){var p=new StackPanel();foreach(var a in board.State.A("activity").Where(a=>a.I("task_id")==id))p.Children.Add(Ui.Text(a.S("at")+"  "+a.S("action")+"  "+a.S("detail"),12,Ui.Muted));return p;}

@@ -24,6 +24,7 @@ internal sealed partial class BoardWindow : Window
     bool exiting,refreshing,loadingFilters;
     string page="看板",undo="";
     DateTime undoUntil;
+    DateTime renderedDay=DateTime.Today;
     StackPanel sidebar=new(),reminders=new();
     DockPanel layout=new();
     ContentControl body=new();
@@ -43,7 +44,7 @@ internal sealed partial class BoardWindow : Window
         menu.Items.Add("退出程序",null,(_,_)=>Dispatcher.Invoke(()=>{exiting=true;Close();}));tray.ContextMenuStrip=menu;
         tray.DoubleClick+=(_,_)=>Dispatcher.Invoke(Reopen);tray.BalloonTipClicked+=(_,_)=>Dispatcher.Invoke(Reopen);
         Loaded+=async (_,_)=>await Login();
-        timer.Tick+=async (_,_)=>{if(Unlocked&&!refreshing){refreshing=true;try{await PollReminders();}catch(Exception ex){footer.Text=ex.Message;}finally{refreshing=false;}}};timer.Start();
+        timer.Tick+=async (_,_)=>{if(Unlocked&&!refreshing){refreshing=true;try{await PollReminders();if(renderedDay!=DateTime.Today){renderedDay=DateTime.Today;Render();}}catch(Exception ex){footer.Text=ex.Message;}finally{refreshing=false;}}};timer.Start();
         Closing+=OnClosing;Closed+=(_,_)=>{timer.Stop();tray.Visible=false;tray.Dispose();};
     }
     internal void Reopen(){Show();WindowState=WindowState.Normal;Activate();}
