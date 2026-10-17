@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+source/taskboard/Data/
+build/
+dist/
+.build-venv/
+artifacts/
+*.spec
+
+.test-venv/

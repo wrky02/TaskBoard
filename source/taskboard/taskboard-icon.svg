@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs><linearGradient id="base" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#183653"/><stop offset="1" stop-color="#112237"/></linearGradient><linearGradient id="highlight" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffab5d"/><stop offset="1" stop-color="#e66e29"/></linearGradient></defs>
+  <rect x="7" y="7" width="242" height="242" rx="56" fill="url(#base)"/>
+  <rect x="24" y="25" width="208" height="207" rx="40" fill="none" stroke="#35516a" stroke-width="2"/>
+  <rect x="48" y="59" width="160" height="138" rx="17" fill="#ecf2f6"/>
+  <rect x="48" y="59" width="160" height="29" rx="17" fill="url(#highlight)"/>
+  <rect x="48" y="74" width="160" height="14" fill="url(#highlight)"/>
+  <circle cx="65" cy="74" r="4" fill="#fff"/><circle cx="77" cy="74" r="4" fill="#fff"/>
+  <rect x="62" y="103" width="40" height="77" rx="6" fill="#dce5ed"/>
+  <rect x="108" y="103" width="40" height="77" rx="6" fill="#dae8ee"/>
+  <rect x="154" y="103" width="40" height="77" rx="6" fill="#dce5ed"/>
+  <rect x="69" y="111" width="26" height="19" rx="4" fill="#fff"/>
+  <rect x="115" y="111" width="26" height="28" rx="4" fill="#fff"/>
+  <rect x="161" y="111" width="26" height="34" rx="4" fill="#fff"/>
+  <path d="M168 128l6 6 11-13" fill="none" stroke="#27a885" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="71" y="143" width="20" height="4" rx="2" fill="#b5c5d3"/>
+  <rect x="117" y="151" width="20" height="4" rx="2" fill="#b5c5d3"/>
+</svg>

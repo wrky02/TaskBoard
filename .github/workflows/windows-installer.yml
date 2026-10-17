@@ -1,0 +1,52 @@
+name: Windows installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [build/windows-installer]
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Browser regression
+        shell: pwsh
+        run: |
+          python -m venv .test-venv
+          .test-venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Test dependencies failed' }
+          .test-venv\Scripts\python.exe -m playwright install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Browser installation failed' }
+          Push-Location source\taskboard
+          try {
+            ..\..\.test-venv\Scripts\python.exe test_browser.py
+            if ($LASTEXITCODE -ne 0) { throw 'Browser regression failed' }
+          } finally { Pop-Location }
+      - name: Build and smoke-test EXE and installer
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+      - name: Test isolated install and uninstall preserve data
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $install = Join-Path $env:RUNNER_TEMP 'TaskBoard-install-test'
+          $installer = Start-Process -FilePath 'dist\Setup_TaskBoard_2.0.0.exe' -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"") -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw 'Installer failed' }
+          .build-venv\Scripts\python.exe scripts\smoke-packaged.py "$install\TaskBoard.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed application smoke test failed' }
+          New-Item -ItemType Directory -Path "$install\Data" -Force | Out-Null
+          Set-Content "$install\Data\preserve.txt" 'keep'
+          $uninstall = Start-Process -FilePath "$install\unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw 'Uninstall failed' }
+          if (-not (Test-Path "$install\Data\preserve.txt")) { throw 'Uninstall removed user data' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TaskBoard-Windows-2.0.0
+          path: |
+            dist/Setup_TaskBoard_2.0.0.exe
+            dist/TaskBoard/

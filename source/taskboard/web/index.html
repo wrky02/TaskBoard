@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>任务看板系统</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <section id="login" class="login-screen">
+      <div class="login-art">
+        <div class="brand-mark">T<span>·</span></div>
+        <p class="eyebrow">YOUR PERSONAL WORKSPACE</p>
+        <h1>让每一步推进，<br />都有迹可循。</h1>
+        <p>本地保存 · 专注工作 · 从容交付</p>
+        <div class="art-board"><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <form id="loginForm" class="login-form">
+        <div class="brand-mark small">T<span>·</span></div>
+        <p class="eyebrow">TASKBOARD / 02</p>
+        <h2 id="loginHeading">欢迎回来</h2>
+        <p id="loginHint" class="muted">输入本机密码，进入你的工作区。</p>
+        <label for="password">本机密码</label
+        ><input
+          id="password"
+          type="password"
+          autocomplete="current-password"
+          minlength="8"
+          required
+        /><label id="confirmLabel" for="confirmPassword" hidden>确认密码</label
+        ><input
+          id="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          hidden
+        />
+        <p id="loginError" role="alert"></p>
+        <button class="primary" type="submit">进入工作区 <span>→</span></button
+        ><small>数据存储在本机，不需要云端账户。</small>
+      </form>
+    </section>
+    <div id="workspace" class="workspace" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark small">T<span>·</span></span>
+          <div>
+            <strong id="brandName">任务看板系统</strong
+            ><small>PERSONAL WORKSPACE</small>
+          </div>
+        </div>
+        <div class="nav-caption">工作空间</div>
+        <nav id="nav">
+          <button data-page="board" class="active">
+            <span>▦</span>工作看板</button
+          ><button data-page="calendar"><span>▤</span>日历视图</button
+          ><button data-page="reminders"><span>◷</span>到期提醒</button
+          ><button data-page="archive"><span>▣</span>已完成归档</button
+          ><button data-page="trash"><span>♲</span>回收站</button
+          ><button data-page="activity"><span>≡</span>操作记录</button
+          ><button data-page="tags"><span>◇</span>标签管理</button
+          ><button data-page="tools"><span>⚙</span>数据与设置</button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="local-status"><b></b> 本地工作区 <span>V2.0</span></div>
+          <button id="lockBtn">锁定工作区 <span>↗</span></button
+          ><button id="exitBtn" class="exit">退出程序</button>
+        </div>
+      </aside>
+      <main id="main">
+        <header class="topbar">
+          <span
+            >我的工作空间 <i>/</i> <span id="breadcrumb">工作看板</span></span
+          >
+          <div>
+            <span class="local-pill">本地保存</span
+            ><span id="welcome">个人工作区</span
+            ><span class="avatar" id="avatar">我</span>
+          </div>
+        </header>
+        <section class="page-head">
+          <div>
+            <p class="eyebrow" id="pageEyebrow">WORK OVERVIEW</p>
+            <h1 id="pageTitle">工作看板</h1>
+            <p class="muted" id="pageDescription">
+              把想法变成行动，让重要的事有序发生。
+            </p>
+          </div>
+          <button id="newTask" class="primary">＋ 新建任务</button>
+        </section>
+        <div id="pageContent"></div>
+      </main>
+    </div>
+    <aside id="drawer" class="drawer" hidden aria-label="任务编辑">
+      <header>
+        <div>
+          <p class="eyebrow">TASK DETAILS</p>
+          <h2 id="drawerTitle">新建任务</h2>
+        </div>
+        <button id="closeDrawer" aria-label="关闭任务">×</button>
+      </header>
+      <form id="taskForm">
+        <div class="drawer-body">
+          <label for="taskTitle">任务标题 <span>*</span></label
+          ><input
+            id="taskTitle"
+            maxlength="240"
+            required
+            placeholder="这次准备完成什么？"
+          />
+          <div class="two-fields">
+            <div>
+              <label for="taskStatus">当前阶段</label
+              ><select id="taskStatus">
+                <option>计划中</option>
+                <option>进行中</option>
+                <option>完成</option>
+              </select>
+            </div>
+            <div>
+              <label for="taskDue">截止日期</label
+              ><input id="taskDue" type="date" />
+            </div>
+          </div>
+          <label>任务标签</label>
+          <div id="taskTags" class="tag-options"></div>
+          <label for="taskNote">备注与内容</label
+          ><textarea
+            id="taskNote"
+            rows="5"
+            placeholder="记录需求、过程与结果，也可以粘贴截图…"
+          ></textarea>
+          <div class="section-label">
+            <h3>手动检查清单</h3>
+            <span id="checkCount"></span>
+          </div>
+          <div id="checklist"></div>
+          <div class="inline-add">
+            <input
+              id="checkInput"
+              placeholder="添加一项检查内容"
+              maxlength="120"
+            /><button type="button" id="addCheck">＋</button>
+          </div>
+          <div class="section-label"><h3>里程碑</h3></div>
+          <div id="milestones"></div>
+          <div class="inline-add">
+            <input
+              id="milestoneInput"
+              placeholder="添加关键节点"
+              maxlength="120"
+            /><button type="button" id="addMilestone">＋</button>
+          </div>
+          <div class="section-label">
+            <h3>图片与文档</h3>
+            <button type="button" id="pickFiles" class="text-button">
+              ＋ 添加附件
+            </button>
+          </div>
+          <p class="hint">
+            附件、版本备注、检查项都在点击“保存任务”后生效；取消会放弃更改。单文件及本次新增附件总计上限
+            100 MB。
+          </p>
+          <input type="file" id="fileInput" multiple hidden />
+          <div id="files"></div>
+          <h3>近期记录</h3>
+          <div id="taskHistory" class="history-mini"></div>
+        </div>
+        <footer>
+          <button type="button" id="duplicateTask">复制</button
+          ><button type="button" id="trashTask" class="danger-text">
+            移入回收站</button
+          ><button type="button" id="archiveTask">归档</button><span></span
+          ><button type="button" id="cancelTask">取消</button
+          ><button type="submit" class="primary" id="saveTask">保存任务</button>
+        </footer>
+      </form>
+    </aside>
+    <dialog id="dialog">
+      <form method="dialog" id="dialogForm">
+        <h2 id="dialogTitle"></h2>
+        <p id="dialogMessage"></p>
+        <div id="dialogFields"></div>
+        <div class="dialog-actions">
+          <button value="cancel" id="dialogCancel" formnovalidate>取消</button
+          ><button value="ok" id="dialogOk" class="primary">确定</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="imageDialog">
+      <button id="closeImage" aria-label="关闭图片">×</button
+      ><img id="previewImage" alt="附件图片预览" />
+      <p id="previewName"></p>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>
