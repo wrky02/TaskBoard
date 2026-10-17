@@ -43,6 +43,6 @@ Azure 应用需配置 GitHub OIDC 联合身份：issuer `https://token.actions.g
 5. 签名并校验 Setup_TaskBoard_3.0.0.exe，再执行实际安装、原生 UI、卸载保留数据验收。
 6. 制品附带 `SHA256SUMS.txt` 与 `SIGNING-STATUS.txt`。没有配置签名时，状态明确写为 UNSIGNED。
 
-当前没有证书，因此**云身份认证、真实签名与证书链校验尚未执行**。工作流已接好，需申请身份、配置以上值，再运行 Native Windows installer。代码签名不保证立即建立 SmartScreen 信誉，也不能保证防病毒产品永不误报。
+当前没有证书，因此**云身份认证、真实签名与证书链校验尚未执行**。工作流已接好，需申请身份、配置以上值，在 `build/native-windows` 推送新提交触发构建；工作流进入默认分支后也可通过 workflow_dispatch 手动运行。代码签名不保证立即建立 SmartScreen 信誉，也不能保证防病毒产品永不误报。
 
 下载包的解除锁定仅用于已确认来源和校验值后的本地操作，不等于签名；无需关闭 Defender。仓库不提供关闭安全防护或自行添加不受信任根证书的脚本。

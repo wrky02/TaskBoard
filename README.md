@@ -6,7 +6,7 @@ WPF 原生界面、本地 SQLite 数据和私有数据引擎。**不调用 Edge 
 
 ## 下载与使用
 
-[Native Windows installer 构建页面](https://github.com/wrky02/TaskBoard/actions/workflows/native-windows.yml)。选择成功构建，登录 GitHub，在 Artifacts 下载 `TaskBoard-Native-Windows-3.0.0`，解压运行 `Setup_TaskBoard_3.0.0.exe`。包内附带 SHA256SUMS.txt 与 SIGNING-STATUS.txt。
+**[3.0.0 成功构建与下载](https://github.com/wrky02/TaskBoard/actions/runs/39023528151)**。Windows 实际安装、原生控件、无浏览器进程/无 TCP 监听、托盘和卸载保留数据均通过。登录 GitHub，在 Artifacts 下载 `TaskBoard-Native-Windows-3.0.0`，解压运行 `Setup_TaskBoard_3.0.0.exe`。包内附带 SHA256SUMS.txt 与 SIGNING-STATUS.txt。
 
 尚未取得受信任的签名身份，当前包是**未签名**构建。已接入 Azure Artifact Signing 自动签名流程；申请与配置步骤见 [正式代码签名](docs/CODE-SIGNING.md)。wrky02 元数据不等于 Windows 的“已验证的发布者”。
 

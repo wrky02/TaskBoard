@@ -1,5 +1,15 @@
 # 2.1 / 2.0 开发验证
 
+## 3.0 原生 Windows 重构
+
+- Linux 交叉编译：WPF Debug 和 win-x64 自包含 Release 发布通过；最新编译零警告、零错误。
+- 27 项测试通过：新增真实私有管道进程的认证、附件事务、进程重启草稿恢复、依赖/重复/撤销、备份预览恢复、隐私报告和跨进程锁测试；同时保留 2.1 的业务回归。
+- V1.3 存储/迁移测试通过；共享规则抽取后，旧 2.1 浏览器回归仍通过。旧界面保留作兼容性验证，不属于原生安装包。
+- Windows 安装后通过 UI Automation 驱动真实 WPF 控件；测试脚本为 `scripts/check-native.py`，监控进程树及 TCP 监听。[最终 Windows 构建](https://github.com/wrky02/TaskBoard/actions/runs/39023528151) 成功：原生操作、剪贴板图片草稿恢复、日期快捷选择、无改动关闭、锁定解锁、托盘/重复启动/退出、安装发布者元数据、卸载数据哈希保留全部通过。源代码提交 `108977f`；制品 `TaskBoard-Native-Windows-3.0.0`（56.1 MB）。
+- 没有受信任签名身份，因此签名步骤跳过；不能据此声称已验证发布者。签名流程、申请材料及配置见 [代码签名](CODE-SIGNING.md)。
+- 未验证：真实中文 IME 候选窗、多显示器、用户机器的旧固定图标缓存、实际 CA 签名链和 SmartScreen 信誉。自动输入中文文本不等于实机 IME 测试。
+
+
 ## 2.1 综合升级验收
 
 - [Windows 成功构建与安装包](https://github.com/wrky02/TaskBoard/actions/runs/39020082997)；源码提交 `4f5b48a`；产物 `TaskBoard-Windows-2.1.0`（29.6 MB）。
