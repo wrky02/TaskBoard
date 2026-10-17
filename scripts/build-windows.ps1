@@ -24,4 +24,4 @@ if (-not $Compiler) { $Compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup
 if (-not (Test-Path $Compiler)) { throw 'Install Inno Setup 6 and add ISCC.exe to PATH.' }
 & $Compiler source\installer\TaskBoard.iss
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
-Get-FileHash dist\Setup_TaskBoard_2.0.0.exe -Algorithm SHA256 | Format-List
+Get-FileHash dist\Setup_TaskBoard_2.0.1.exe -Algorithm SHA256 | Format-List

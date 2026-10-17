@@ -4,7 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>任务看板系统</title>
+    <link
+      rel="icon"
+      href="/favicon.ico"
+      type="image/x-icon"
+      sizes="16x16 24x24 32x32 48x48 64x64 128x128 256x256"
+    />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/date-picker.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -62,7 +69,7 @@
           ><button data-page="tools"><span>⚙</span>数据与设置</button>
         </nav>
         <div class="sidebar-bottom">
-          <div class="local-status"><b></b> 本地工作区 <span>V2.0</span></div>
+          <div class="local-status"><b></b> 本地工作区 <span>V2.0.1</span></div>
           <button id="lockBtn">锁定工作区 <span>↗</span></button
           ><button id="exitBtn" class="exit">退出程序</button>
         </div>
@@ -118,8 +125,20 @@
               </select>
             </div>
             <div>
-              <label for="taskDue">截止日期</label
-              ><input id="taskDue" type="date" />
+              <label for="dueButton">截止日期</label>
+              <input id="taskDue" type="hidden" />
+              <button
+                id="dueButton"
+                type="button"
+                class="due-button"
+                aria-haspopup="dialog"
+                aria-controls="dateDialog"
+              >
+                <span id="dueLabel">设置截止日期</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5h16v16H4z M4 10h16 M8 2v6 M16 2v6" />
+                </svg>
+              </button>
             </div>
           </div>
           <label>任务标签</label>
@@ -182,7 +201,7 @@
         <p id="dialogMessage"></p>
         <div id="dialogFields"></div>
         <div class="dialog-actions">
-          <button value="cancel" id="dialogCancel" formnovalidate>取消</button
+          <button type="button" id="dialogCancel">取消</button
           ><button value="ok" id="dialogOk" class="primary">确定</button>
         </div>
       </form>
@@ -191,6 +210,39 @@
       <button id="closeImage" aria-label="关闭图片">×</button
       ><img id="previewImage" alt="附件图片预览" />
       <p id="previewName"></p>
+    </dialog>
+    <dialog id="dateDialog" aria-labelledby="dateTitle">
+      <div class="date-heading">
+        <div>
+          <p class="eyebrow">TASK DEADLINE</p>
+          <h2 id="dateTitle">安排截止日期</h2>
+        </div>
+        <button id="dateClose" type="button" aria-label="关闭日期选择器">
+          ×
+        </button>
+      </div>
+      <p class="date-summary" id="dateSummary"></p>
+      <div class="date-shortcuts" aria-label="快捷日期">
+        <button type="button" data-offset="0">今天</button
+        ><button type="button" data-offset="1">明天</button
+        ><button type="button" data-offset="7">一周后</button>
+      </div>
+      <div class="date-month">
+        <button id="datePrevious" type="button" aria-label="上个月">‹</button
+        ><strong id="dueMonth" aria-live="polite"></strong
+        ><button id="dateNext" type="button" aria-label="下个月">›</button>
+      </div>
+      <div class="date-weekdays" aria-hidden="true">
+        <span>一</span><span>二</span><span>三</span><span>四</span
+        ><span>五</span><span>六</span><span>日</span>
+      </div>
+      <div id="dateGrid" role="grid" aria-labelledby="dueMonth"></div>
+      <div class="date-footer">
+        <span>方向键选日期 · Enter 确认</span
+        ><button id="dateClear" type="button" class="text-button">
+          清除日期
+        </button>
+      </div>
     </dialog>
     <div id="toast" role="status" hidden></div>
   </body>

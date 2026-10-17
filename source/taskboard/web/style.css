@@ -849,6 +849,149 @@ dialog input,
 dialog select {
   width: 100%;
 }
+.due-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 43px;
+  text-align: left;
+  color: var(--muted);
+  font-size: 13px;
+}
+.due-button.has-date {
+  color: var(--ink);
+}
+.due-button svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.6;
+}
+#dateDialog {
+  width: min(380px, calc(100% - 32px));
+  padding: 24px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.date-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.date-heading .eyebrow {
+  color: var(--primary);
+  font-size: 10px;
+  letter-spacing: 2px;
+  margin: 0 0 6px;
+}
+.date-heading h2 {
+  margin: 0;
+}
+#dateClose {
+  border: 0;
+  padding: 4px 10px;
+  font-size: 24px;
+  color: var(--muted);
+}
+#dateDialog .date-summary {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 12px 0 18px;
+}
+.date-shortcuts {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.date-shortcuts button {
+  flex: 1;
+  padding: 9px 6px;
+  background: #f5f4ff;
+  border-color: #eeedff;
+  color: #5657c8;
+  font-size: 12px;
+}
+.date-shortcuts button:hover {
+  background: #e9e7ff;
+}
+.date-month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 14px 0;
+}
+.date-month button {
+  border: 0;
+  font-size: 22px;
+  padding: 2px 12px;
+}
+.date-month strong {
+  font-size: 15px;
+}
+.date-weekdays,
+.date-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.date-weekdays {
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.date-weekdays span:nth-last-child(-n + 2) {
+  color: #ba8290;
+}
+.date-row {
+  margin-bottom: 4px;
+}
+.date-day {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid transparent;
+  padding: 0;
+  font-size: 13px;
+  border-radius: 9px;
+}
+.date-day.outside {
+  color: #a8afbf;
+}
+.date-day.today {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+.date-day.selected {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 3px 8px #6465e833;
+}
+.date-day:disabled {
+  cursor: default;
+}
+.date-footer {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.date-footer span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.date-footer button {
+  font-size: 12px;
+  white-space: nowrap;
+}
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

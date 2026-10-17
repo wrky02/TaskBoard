@@ -32,6 +32,15 @@ jobs:
               throw 'Browser regression failed; see annotation and diagnostic artifact'
             }
           } finally { Pop-Location }
+      - name: Verify native Edge window icons
+        shell: pwsh
+        run: |
+          .test-venv\Scripts\python.exe scripts\check-windows-icons.py *> artifacts/native-icons.log
+          if ($LASTEXITCODE -ne 0) {
+            .test-venv\Scripts\python.exe scripts\report-ci.py artifacts/native-icons.log 'Native window icons'
+            throw 'Native window icon verification failed'
+          }
+          Get-Content artifacts/native-icons.log
       - name: Build and smoke-test EXE and installer
         shell: pwsh
         run: |
@@ -47,7 +56,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $install = Join-Path $env:RUNNER_TEMP 'TaskBoard-install-test'
-          $installer = Start-Process -FilePath 'dist\Setup_TaskBoard_2.0.0.exe' -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"") -Wait -PassThru
+          $installer = Start-Process -FilePath 'dist\Setup_TaskBoard_2.0.1.exe' -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"") -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw 'Installer failed' }
           .build-venv\Scripts\python.exe scripts\smoke-packaged.py "$install\TaskBoard.exe" "$install\Data"
           if ($LASTEXITCODE -ne 0) { throw 'Installed application smoke test failed' }
@@ -66,7 +75,7 @@ jobs:
           path: artifacts/
       - uses: actions/upload-artifact@v4
         with:
-          name: TaskBoard-Windows-2.0.0
+          name: TaskBoard-Windows-2.0.1
           path: |
-            dist/Setup_TaskBoard_2.0.0.exe
+            dist/Setup_TaskBoard_2.0.1.exe
             dist/TaskBoard/

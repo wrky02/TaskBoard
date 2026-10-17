@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import date
+from datetime import date, timedelta
 from playwright.sync_api import sync_playwright, expect
 
 HERE = Path(__file__).resolve().parent
@@ -30,6 +30,10 @@ with tempfile.TemporaryDirectory(prefix='taskboard-browser-') as tmp:
             context=browser.new_context(viewport={'width':1440,'height':1024},accept_downloads=True)
             page=context.new_page();errors=[];page.on('pageerror',lambda err:errors.append(str(err)))
             page.goto(url);expect(page.locator('#loginHeading')).to_have_text('创建你的工作区')
+            icon=context.request.get(origin+'/favicon.ico')
+            assert icon.ok and icon.headers['content-type']=='image/x-icon'
+            assert icon.body()==(HERE/'taskboard.ico').read_bytes()
+            expect(page.locator('link[rel="icon"]')).to_have_attribute('href','/favicon.ico')
             page.screenshot(path=str(ARTIFACTS/'login.png'))
             page.fill('#password','password123');page.fill('#confirmPassword','password123');page.locator('#loginForm button').click()
             expect(page.locator('#workspace')).to_be_visible();expect(page.locator('#lanes .lane')).to_have_count(3)
@@ -38,7 +42,26 @@ with tempfile.TemporaryDirectory(prefix='taskboard-browser-') as tmp:
             page.locator('#taskTitle').press_sequentially('中文标题输入测试 ABC')
             assert page.evaluate("originalTitle===document.querySelector('#taskTitle') && originalLanes===document.querySelector('#lanes') && changes===0")
             page.fill('#taskNote','验证备注、附件与检查清单一并保存。')
-            page.select_option('#taskStatus','进行中');page.fill('#taskDue',date.today().isoformat())
+            page.select_option('#taskStatus','进行中')
+            page.click('#dueButton');page.click('[data-offset="1"]')
+            expect(page.locator('#taskDue')).to_have_value((date.today()+timedelta(days=1)).isoformat())
+            page.click('#dueButton');page.keyboard.press('Escape')
+            expect(page.locator('#drawer')).to_be_visible();expect(page.locator('#dueButton')).to_be_focused()
+            expect(page.locator('#taskDue')).to_have_value((date.today()+timedelta(days=1)).isoformat())
+            # Seed a historical date to exercise end-of-month and leap-year navigation.
+            page.locator('#taskDue').evaluate("el=>el.value='2028-01-31'")
+            page.click('#dueButton');page.click('#dateNext');page.keyboard.press('Enter')
+            expect(page.locator('#taskDue')).to_have_value('2028-02-29')
+            page.click('#dueButton');page.keyboard.press('ArrowRight');page.keyboard.press('Enter')
+            expect(page.locator('#taskDue')).to_have_value('2028-03-01')
+            page.click('#dueButton');page.keyboard.press('PageUp');page.keyboard.press('Enter')
+            expect(page.locator('#taskDue')).to_have_value('2028-02-01')
+            page.click('#dueButton');page.click('#dateClear');expect(page.locator('#taskDue')).to_have_value('')
+            page.click('#dueButton');page.click('[data-offset="7"]')
+            expect(page.locator('#taskDue')).to_have_value((date.today()+timedelta(days=7)).isoformat())
+            page.click('#dueButton');page.click('[data-offset="0"]')
+            expect(page.locator('#taskDue')).to_have_value(date.today().isoformat())
+            page.click('#dueButton');page.screenshot(path=str(ARTIFACTS/'date-picker.png'));page.click('#dateClose')
             page.fill('#checkInput','核对需求');page.click('#addCheck');page.locator('[data-check]').check()
             page.fill('#milestoneInput','完成评审');page.click('#addMilestone');page.locator('[data-milestone]').check()
             png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1cAAAAASUVORK5CYII=')
@@ -48,15 +71,27 @@ with tempfile.TemporaryDirectory(prefix='taskboard-browser-') as tmp:
             expect(page.locator('#taskTitle')).to_have_value('中文标题输入测试 ABC')
             page.click('#saveTask');expect(page.locator('#drawer')).to_be_hidden();expect(page.locator('.card')).to_have_count(1)
             page.locator('.card').click();expect(page.locator('[data-check]')).to_be_checked();expect(page.locator('[data-milestone]')).to_be_checked()
+            expect(page.locator('#taskDue')).to_have_value(date.today().isoformat())
+            page.click('#dueButton');page.click('[data-offset="7"]')
             page.locator('[data-preview]').click();expect(page.locator('#imageDialog')).to_be_visible();assert page.locator('#previewImage').evaluate('(img)=>img.complete && img.naturalWidth>0');page.click('#closeImage')
             page.set_input_files('#fileInput',{'name':'取消的附件.txt','mimeType':'text/plain','buffer':b'not saved'})
             page.fill('[data-file-label]','V2-unsaved');page.click('[data-remove-file]');page.click('#cancelTask');page.click('#dialogOk');expect(page.locator('#drawer')).to_be_hidden()
             page.locator('.card').click();expect(page.locator('.file-row')).to_have_count(1);expect(page.locator('[data-file-label]')).to_have_value('初稿')
+            expect(page.locator('#taskDue')).to_have_value(date.today().isoformat())
             page.fill('[data-file-label]','V2');page.fill('[data-file-note]','评审稿');page.click('#saveTask');expect(page.locator('#drawer')).to_be_hidden()
             page.locator('.card').click();page.click('#duplicateTask');expect(page.locator('#drawer')).to_be_hidden();expect(page.locator('.card')).to_have_count(2)
             copy=page.locator('.card').filter(has_text='（副本）');copy.click();expect(page.locator('[data-check]')).not_to_be_checked();expect(page.locator('.file-row')).to_have_count(0);page.click('#cancelTask')
             copy.drag_to(page.locator('.lane[data-status="完成"] .lane-items'));expect(page.locator('.lane[data-status="完成"] .card')).to_have_count(1)
-            page.click('[data-page="tags"]');page.click('#newTag');page.fill('#dlg-name','产品设计');page.click('#dialogOk');expect(page.locator('.list-row .tag')).to_have_text('产品设计')
+            page.click('[data-page="tags"]');page.click('#newTag');page.press('#dlg-name','Enter')
+            expect(page.locator('#dialog')).to_be_visible()
+            page.fill('#dlg-name','产品设计');page.locator('#dlg-name').dispatch_event('compositionstart')
+            page.press('#dlg-name','Enter');expect(page.locator('#dialog')).to_be_visible()
+            page.locator('#dlg-name').dispatch_event('compositionend');page.press('#dlg-name','Enter')
+            expect(page.locator('.list-row .tag')).to_have_text('产品设计')
+            page.click('#newTag');page.fill('#dlg-name','不保存');page.press('#dlg-name','Escape')
+            expect(page.locator('#dialog')).to_be_hidden();expect(page.locator('.list-row .tag')).to_have_count(1)
+            page.click('#newTag');page.fill('#dlg-name','也不保存');page.click('#dialogCancel')
+            expect(page.locator('.list-row .tag')).to_have_count(1)
             page.click('[data-page="board"]');page.click('#bulkToggle');page.locator('[data-select]').first.check();page.select_option('#bulkTag',label='产品设计');page.click('#bulkAddTag');expect(page.locator('.card .tag')).to_have_count(1)
             page.click('#bulkToggle');page.click('[data-page="calendar"]');expect(page.locator('.calendar-task')).to_have_count(2)
             page.click('[data-page="board"]');page.locator('.lane[data-status="完成"] .card').click();page.click('#archiveTask');expect(page.locator('.card')).to_have_count(1)
@@ -94,6 +129,9 @@ with tempfile.TemporaryDirectory(prefix='taskboard-browser-') as tmp:
             page.screenshot(path=str(ARTIFACTS/'board.png'),full_page=True)
             page.set_viewport_size({'width':390,'height':844});page.screenshot(path=str(ARTIFACTS/'mobile.png'),full_page=True)
             assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
+            page.click('#newTask');page.click('#dueButton');page.screenshot(path=str(ARTIFACTS/'date-picker-mobile.png'))
+            bounds=page.locator('#dateDialog').bounding_box();assert bounds['x']>=0 and bounds['x']+bounds['width']<=390
+            page.keyboard.press('Escape');page.click('#cancelTask');expect(page.locator('#drawer')).to_be_hidden()
             assert not errors,errors
             # Re-launching the same data directory must reuse the instance.
             second=subprocess.run([sys.executable,str(HERE/'launcher.py'),'--no-browser','--data-root',str(root)],capture_output=True,timeout=10)

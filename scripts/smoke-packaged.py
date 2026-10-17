@@ -23,6 +23,10 @@ with tempfile.TemporaryDirectory(prefix='taskboard-package-') as tmp:
         def post(path,item):
             with client.open(Request(origin+path,data=json.dumps(item).encode(),headers={'Content-Type':'application/json','Origin':origin,'X-TaskBoard':data['capability']})) as r:return json.load(r)
         with client.open(origin+'/') as r:assert b'TASKBOARD' in r.read()
+        with client.open(origin+'/favicon.ico') as r:
+            assert r.headers.get_content_type() == 'image/x-icon'
+            assert r.read()[:4] == b'\x00\x00\x01\x00'
+        with client.open(origin+'/date-picker.js') as r:assert b'renderDatePicker' in r.read()
         post('/api/login',{'password':'smokepass123','confirm':'smokepass123'})
         state=post('/api/task/save',{'title':'打包验收任务','status':'计划中','new_files':[{'name':'smoke.txt','data':base64.b64encode(b'smoke attachment').decode()}]})
         assert state['tasks'][0]['title']=='打包验收任务'

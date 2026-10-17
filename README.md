@@ -1,4 +1,4 @@
-# 任务看板系统 2.0
+# 任务看板系统 2.0.1
 
 单人、本地使用的任务看板，基于 Python 本地 HTTP 服务、系统浏览器和 SQLite。
 新版已移除 Qt / WebEngine 运行依赖，重新设计登录页、导航、看板和任务抽屉。
@@ -69,12 +69,16 @@ python test_browser.py
 powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1
 ```
 
-脚本安装依赖、运行数据和接口回归、生成 `dist\TaskBoard\TaskBoard.exe`、对冻结程序做登录/保存/退出冒烟检查，再生成 `dist\Setup_TaskBoard_2.0.0.exe` 并打印 SHA256。
+脚本安装依赖、运行数据和接口回归、生成 `dist\TaskBoard\TaskBoard.exe`、对冻结程序做登录/保存/退出冒烟检查，再生成 `dist\Setup_TaskBoard_2.0.1.exe` 并打印 SHA256。
 `ExecutionPolicy Bypass` 仅用于运行本仓库的本地 PowerShell 脚本，不改变机器永久策略，也不关闭依赖下载的 TLS 或校验。
 
 GitHub Actions 的 `Windows installer` 工作流可手动运行；推送到 `build/windows-installer` 也会构建。工作流包含真实浏览器回归、冻结 EXE 冒烟、隔离安装/卸载与数据保留检查，成功后上传安装器。本次 Windows CI 已执行并通过，构建记录见下文。
 
-Windows 安装器已生成并通过 CI：
+2.0.0 基线已发布：[安装器与说明](https://github.com/wrky02/TaskBoard/releases/tag/v2.0.0)。
+
+2.0.1 改进窗口图标、标签回车确认和中文日期选择器，详见 [版本说明与可选设计](docs/releases/2.0.1.md)。当前构建产物名为 `TaskBoard-Windows-2.0.1`。
+
+以下为 2.0.0 基线的验证记录：
 
 - [成功构建与安装包](https://github.com/wrky02/TaskBoard/actions/runs/39015780834)
 - 登录 GitHub 后，在 Artifacts 下载 `TaskBoard-Windows-2.0.0`，解压运行 `Setup_TaskBoard_2.0.0.exe`。

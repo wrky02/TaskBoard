@@ -98,6 +98,23 @@ async function api(path, data) {
 function report(error) {
   notify(error.message || String(error));
 }
+// Only the confirmation button submits; Enter must not activate Cancel.
+$("#dialogCancel").onclick = () => $("#dialog").close("cancel");
+let dialogComposing = false;
+$("#dialogForm").addEventListener("compositionstart", () => {
+  dialogComposing = true;
+});
+$("#dialogForm").addEventListener("compositionend", () => {
+  dialogComposing = false;
+});
+$("#dialogForm").addEventListener("keydown", (event) => {
+  if (
+    event.key === "Enter" &&
+    (dialogComposing || event.isComposing || event.keyCode === 229)
+  ) {
+    event.preventDefault();
+  }
+});
 async function dialog(title, message, fields = [], ok = "确定", cancel = true) {
   if ($("#dialog").open) return null;
   $("#dialogTitle").textContent = title;
@@ -111,6 +128,7 @@ async function dialog(title, message, fields = [], ok = "确定", cancel = true)
   $("#dialogOk").textContent = ok;
   $("#dialogCancel").hidden = !cancel;
   $("#dialog").returnValue = "";
+  dialogComposing = false;
   $("#dialog").showModal();
   ($("#dialogFields input, #dialogFields select") || $("#dialogOk")).focus();
   return new Promise((resolve) => {
@@ -518,6 +536,7 @@ function showTask(id = null, status = "计划中") {
   $("#taskTitle").value = draft.title;
   $("#taskStatus").value = draft.status;
   $("#taskDue").value = draft.due_date || "";
+  updateDueLabel();
   $("#taskNote").value = draft.note;
   $("#taskTags").innerHTML =
     state.tags
@@ -569,7 +588,13 @@ $("#closeDrawer").onclick = $("#cancelTask").onclick = () => closeDrawer();
 document.addEventListener(
   "pointerdown",
   (e) => {
-    if (!draft || $("#dialog").open || $("#imageDialog").open) return;
+    if (
+      !draft ||
+      $("#dialog").open ||
+      $("#imageDialog").open ||
+      $("#dateDialog").open
+    )
+      return;
     if (!e.target.closest("#drawer")) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -1057,6 +1082,7 @@ document.addEventListener("keydown", (e) => {
     e.key === "Escape" &&
     draft &&
     !$("#dialog").open &&
+    !$("#dateDialog").open &&
     !$("#imageDialog").open
   ) {
     e.preventDefault();

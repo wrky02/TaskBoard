@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlsplit, parse_qs, quote
 import storage as store
 
-VERSION = '2.0.0'
+VERSION = '2.0.1'
 WEB = Path(__file__).resolve().parent / 'web'
 
 
@@ -189,9 +189,11 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get('Host') != f'127.0.0.1:{self.server.server_port}':
                 return self.respond(403, {'error': 'Host 无效'})
             path = urlsplit(self.path).path
-            if self.command == 'GET' and path in {'/', '/app.js', '/style.css'}:
-                name = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[path]
-                return self.respond(200, content=(WEB / name).read_bytes(), mime={'/':'text/html', '/app.js':'text/javascript', '/style.css':'text/css'}[path] + '; charset=utf-8')
+            if self.command == 'GET' and path == '/favicon.ico':
+                return self.respond(200, content=(WEB.parent / 'taskboard.ico').read_bytes(), mime='image/x-icon')
+            if self.command == 'GET' and path in {'/', '/app.js', '/date-picker.js', '/style.css'}:
+                name = {'/': 'index.html', '/app.js': 'app.js', '/date-picker.js': 'date-picker.js', '/style.css': 'style.css'}[path]
+                return self.respond(200, content=(WEB / name).read_bytes(), mime={'/':'text/html', '/app.js':'text/javascript', '/date-picker.js':'text/javascript', '/style.css':'text/css'}[path] + '; charset=utf-8')
             jar = cookies.SimpleCookie()
             jar.load(self.headers.get('Cookie', ''))
             cookie_name = 'tb_session_' + str(self.server.server_port)
