@@ -1,0 +1,31 @@
+name: Publish verified 2.0
+on:
+  push:
+    branches: [release/2.0.0]+permissions:
+  contents: write
+  actions: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: TaskBoard-Windows-2.0.0
+          run-id: 39015780834
+          github-token: ${{ github.token }}
+          path: release-assets
+      - name: Publish baseline installer and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          installer=$(find release-assets -name Setup_TaskBoard_2.0.0.exe -type f)
+          test -n "$installer"
+          cp "$installer" Setup_TaskBoard_2.0.0.exe
+          sha256sum Setup_TaskBoard_2.0.0.exe > SHA256SUMS.txt
+          gh release create v2.0.0 Setup_TaskBoard_2.0.0.exe SHA256SUMS.txt \
+            --target 47b351501d3382db75b5596cd87cec86261d7aaa \
+            --title '任务看板系统 2.0.0' --notes-file docs/releases/2.0.0.md --latest
