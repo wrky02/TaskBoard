@@ -102,13 +102,11 @@ try:
     # Real installed icon and WPF class, not Edge app mode.
     assert 'HwndWrapper' in Desktop(backend='win32').window(handle=win.handle).class_name()
     screenshot=win.wrapper_object().capture_as_image();screenshot.save(artifacts/'native-board.png')
-    preview=screenshot.convert('RGB');preview.thumbnail((1000,700));stream=io.BytesIO();preview.save(stream,format='JPEG',quality=55)
-    print('::notice title=Native screenshot::'+base64.b64encode(stream.getvalue()).decode())
-    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('最小化到托盘');click(settings,'saveSettings');close_window(settings)
+    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('最小化到托盘');click(settings,'saveSettings');control(settings,'saveSettings');close_window(settings)
     main_handle=win.handle;win32gui.PostMessage(main_handle,win32con.WM_CLOSE,0,0);until(lambda:not win32gui.IsWindowVisible(main_handle))
     second=subprocess.run([str(exe),'--data-root',str(root)],timeout=15);assert second.returncode==0
     win=mainwindow();until(lambda:win.is_visible());assert process.poll() is None
-    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('退出程序');click(settings,'saveSettings');close_window(settings)
+    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('退出程序');click(settings,'saveSettings');control(settings,'saveSettings');close_window(settings)
     win32gui.PostMessage(win.handle,win32con.WM_CLOSE,0,0);process.wait(timeout=20);assert process.returncode==0
     stop.set();assert not violations,violations;assert 'taskboard.engine.exe' in seen,seen
     assert db_scalar('SELECT COUNT(*) FROM tasks')==2
@@ -116,7 +114,8 @@ try:
     (artifacts/'native-acceptance.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     print('::notice title=Native WPF acceptance::PASS: installed WPF controls, task creation, tag Enter, draft recovery, priority, checklist, tray/reopen/exit; no browser process or TCP listener')
 except Exception:
-    traceback.print_exc()
+    failure=traceback.format_exc()
+    print(failure,flush=True)
     try:
         native=Desktop(backend='win32')
         windows=native.windows(process=process.pid)
@@ -131,6 +130,7 @@ except Exception:
                     output.write(entry+'\n')
                     if c.element_info.control_type in ('Window','Text'):print('::notice title=Native control::'+entry[:500])
     except Exception as debug_error:print('Diagnostic failure:',type(debug_error).__name__)
+    print('Native acceptance failure:\n'+failure,flush=True)
     raise
 finally:
     stop.set()
