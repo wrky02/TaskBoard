@@ -278,6 +278,10 @@ function drawLanes() {
       const id = dragId;
       dragId = null;
       const target = e.target.closest(".card");
+      if (target && Number(target.dataset.task) === id) {
+        drawLanes();
+        return;
+      }
       const full = state.tasks.filter(
         (t) => t.status === lane.dataset.status && t.id !== id,
       );
