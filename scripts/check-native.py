@@ -6,6 +6,8 @@ import base64
 import json
 from datetime import date,timedelta
 import win32clipboard
+import win32gui
+import win32con
 from PIL import Image
 import os
 from pathlib import Path
@@ -52,6 +54,10 @@ def control(win,id):
     result=win.child_window(auto_id=id);result.wait('exists enabled',timeout=30);return result.wrapper_object()
 def click(win,id):control(win,id).invoke()
 def text(win,id,value):control(win,id).set_edit_text(value)
+def close_window(win):
+    handle=win.handle
+    win32gui.PostMessage(handle,win32con.WM_CLOSE,0,0)
+    until(lambda:not win32gui.IsWindow(handle))
 def dialog(title):
     # WPF owned windows appear beneath their owner in the UIA tree on
     # some Windows builds. Win32 HWND enumeration still finds the actual dialog.
@@ -69,7 +75,7 @@ try:
     text(win,'quickTitle','Native quick task');control(win,'quickTitle').type_keys('{ENTER}')
     until(lambda:db_scalar('SELECT COUNT(*) FROM tasks')==1)
     click(win,'tags');tags=dialog('标签管理');text(tags,'tagName','NativeTag');control(tags,'tagName').type_keys('{ENTER}')
-    until(lambda:db_scalar("SELECT COUNT(*) FROM tags WHERE name='NativeTag'")==1);tags.close()
+    until(lambda:db_scalar("SELECT COUNT(*) FROM tags WHERE name='NativeTag'")==1);close_window(tags)
     click(win,'newTask');edit=dialog('新建任务');text(edit,'editorTitle','Recovered native draft');text(edit,'editorNote','Native text without browser')
     edit.child_window(title='明天',control_type='Button').invoke()
     stream=io.BytesIO();Image.new('RGB',(12,12),'purple').save(stream,format='BMP')
@@ -90,7 +96,7 @@ try:
         attachment=db.execute('SELECT stored_name FROM attachments').fetchone()[0]
         assert (root/'attachments'/attachment).read_bytes().startswith(b'\x89PNG')
     # Closing an unchanged editor must not re-enter WPF's Closing event.
-    click(win,'task-1');unchanged=dialog('编辑任务');click(unchanged,'closeEditor');until(lambda:not unchanged.exists())
+    click(win,'task-1');unchanged=dialog('编辑任务');unchanged_handle=unchanged.handle;click(unchanged,'closeEditor');until(lambda:not win32gui.IsWindow(unchanged_handle))
     # Exercise lock/re-unlock using native password controls.
     click(win,'lock');control(win,'loginPassword').type_keys('native-test-password',with_spaces=True);click(win,'login');control(win,'quickTitle')
     # Real installed icon and WPF class, not Edge app mode.
@@ -98,12 +104,12 @@ try:
     screenshot=win.wrapper_object().capture_as_image();screenshot.save(artifacts/'native-board.png')
     preview=screenshot.convert('RGB');preview.thumbnail((1000,700));stream=io.BytesIO();preview.save(stream,format='JPEG',quality=55)
     print('::notice title=Native screenshot::'+base64.b64encode(stream.getvalue()).decode())
-    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('最小化到托盘');click(settings,'saveSettings');settings.close()
-    win.close();until(lambda:not mainwindow().is_visible())
+    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('最小化到托盘');click(settings,'saveSettings');close_window(settings)
+    main_handle=win.handle;win32gui.PostMessage(main_handle,win32con.WM_CLOSE,0,0);until(lambda:not win32gui.IsWindowVisible(main_handle))
     second=subprocess.run([str(exe),'--data-root',str(root)],timeout=15);assert second.returncode==0
     win=mainwindow();until(lambda:win.is_visible());assert process.poll() is None
-    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('退出程序');click(settings,'saveSettings');settings.close()
-    win.close();process.wait(timeout=20);assert process.returncode==0
+    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('退出程序');click(settings,'saveSettings');close_window(settings)
+    win32gui.PostMessage(win.handle,win32con.WM_CLOSE,0,0);process.wait(timeout=20);assert process.returncode==0
     stop.set();assert not violations,violations;assert 'taskboard.engine.exe' in seen,seen
     assert db_scalar('SELECT COUNT(*) FROM tasks')==2
     report=dict(passed=True,processes=sorted(seen),browser_processes=False,tcp_listeners=False,tests=['native password controls','quick Enter','tag Enter','draft recovery','priority','checklist','native date shortcut','clipboard image through draft restart','lock/unlock','installed WPF window','tray close','second instance reopen','exit','preserve data'])
