@@ -1,6 +1,6 @@
 # 2.0 开发验证
 
-环境：Linux x64、Python 3.12.14、系统 Chromium、Playwright 1.58.0。
+环境：Linux x64 / Python 3.12.14 / 系统 Chromium，以及 GitHub Actions Windows Server 2022 / Python 3.12 / Playwright Chromium。Playwright 版本 1.58.0。
 
 ## 已执行
 
@@ -9,12 +9,17 @@
 - 系统 Chromium 浏览器流程：首次设密、中文字符输入时保留标题与看板节点、检查项和里程碑、附件暂存和取消、图片预览、复制、跨列/同列拖动、搜索节点稳定与记忆、标签与批量、日历、归档/回收站、设置、三种下载、恢复、锁定/改密、1440px/390px 布局、单实例服务和退出。
 - Linux PyInstaller onedir 构建与冻结程序冒烟：静态资源、首次登录、保存中文任务、正常退出。
 
+- Windows CI 同一份 15 项接口/启动回归、继承数据脚本、完整浏览器回归：全部通过。
+- Windows PyInstaller EXE：首次启动、静态资源、密码登录、保存中文任务与附件、正常退出通过。
+- Inno Setup 安装器：成功生成并执行隔离安装；对安装后的 EXE 再次进行登录/保存/退出测试；卸载后实际 Data 中的数据库和附件逐文件 SHA256 保持一致。
+- [构建记录与安装包](https://github.com/wrky02/TaskBoard/actions/runs/39015780834)，构建源码 `e2cb5e1`，产物 `TaskBoard-Windows-2.0.0`（20.2 MB）。
+
 ## 未执行或限制
 
-- Windows EXE 与安装器构建、安装/卸载、真实升级与文件占用行为：本机缺少 Windows 执行环境、PowerShell 和 Inno Setup；已提供 Windows 构建和 CI 自动化脚本，不能等同通过。
+- 已通过 Windows CI 构建和隔离安装/卸载；真实旧安装目录升级及旧程序运行中的文件占用行为仍需实机验收。
 - Windows 微软/搜狗等输入法候选栏、逐帧闪烁对比、屏幕缩放、多显示器、任务栏唤醒：未验证。无 Qt、无抽屉遮罩和稳定 DOM 只能证明对应实现及自动化行为。
 - Windows 原始 V1.3.1 用户数据库未提供；迁移使用隔离构造的历史结构及附件副本验证。
 - 筛选后拖动、异常断电和大于 100 MB 的真实上传尚需专项验收；排序算法和大小限制已有实现。
 - 密码不等于磁盘加密；数据隔离依赖 Windows 账户权限。
 
-源代码和截图均为开发交付，不是已验收的 Windows 发布版本。
+Windows 安装器为可试用的开发交付，已完成上述自动化验收；不代表所有 Windows 实机使用场景已验收。

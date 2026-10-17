@@ -25,7 +25,7 @@
 3. 升级旧库时，先生成 `before-v2-*.zip` 完整备份，再事务性移除退休的表及字段；任务、检查项、附件、标签和密码保持兼容。缺失附件或完整性检查失败会中止升级。
 4. 恢复先校验 ZIP、数据库及附件，再生成 `pre-restore-*.zip`。替换失败会尝试恢复原库和附件；自动化已覆盖文件替换失败场景，不代表断电过程已验收。
 5. 回滚时关闭新版，保留失败现场，在独立目录中恢复原备份及原安装版本。不要把升级后的唯一数据库交给旧版继续修改。
-6. 卸载脚本保留运行时生成的 `Data`。Windows 实际安装、升级和卸载验收尚待 Windows 构建环境执行。
+6. 卸载脚本保留运行时生成的 `Data`。Windows CI 已验证隔离安装和卸载后数据库、附件哈希保持不变；真实旧版安装升级仍需在数据副本上验收。
 
 ## 开发运行
 
@@ -72,6 +72,12 @@ powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1
 脚本安装依赖、运行数据和接口回归、生成 `dist\TaskBoard\TaskBoard.exe`、对冻结程序做登录/保存/退出冒烟检查，再生成 `dist\Setup_TaskBoard_2.0.0.exe` 并打印 SHA256。
 `ExecutionPolicy Bypass` 仅用于运行本仓库的本地 PowerShell 脚本，不改变机器永久策略，也不关闭依赖下载的 TLS 或校验。
 
-GitHub Actions 的 `Windows installer` 工作流可手动运行；推送到 `build/windows-installer` 也会构建。工作流包含真实浏览器回归、冻结 EXE 冒烟、隔离安装/卸载与数据保留检查，成功后上传安装器。工作流尚未在 GitHub 执行。
+GitHub Actions 的 `Windows installer` 工作流可手动运行；推送到 `build/windows-installer` 也会构建。工作流包含真实浏览器回归、冻结 EXE 冒烟、隔离安装/卸载与数据保留检查，成功后上传安装器。本次 Windows CI 已执行并通过，构建记录见下文。
 
-当前已在 Linux 验证源码及 Linux 冻结程序；**尚未生成 Windows Setup.exe**。Windows 实机中文输入法、窗口/任务栏、多显示器及安装升级仍待验收，不宣称闪烁已修复。未设置发布者名称，也未做代码签名，Windows 可能提示未知发布者。
+Windows 安装器已生成并通过 CI：
+
+- [成功构建与安装包](https://github.com/wrky02/TaskBoard/actions/runs/39015780834)
+- 登录 GitHub 后，在 Artifacts 下载 `TaskBoard-Windows-2.0.0`，解压运行 `Setup_TaskBoard_2.0.0.exe`。
+- 构建源码提交：`e2cb5e1`；产物 ZIP 摘要：`1107064e1c884479fba2a1e61797168b4d418dc19a08fb43b3b4e22016daa69c`。
+
+已验证 Linux 源码/冻结程序及 Windows CI 的浏览器、EXE、安装/卸载流程。真实 Windows 中文输入法、窗口/任务栏、多显示器及旧安装升级仍待验收，不宣称闪烁已修复。未设置发布者名称，也未做代码签名，Windows 可能提示未知发布者。
