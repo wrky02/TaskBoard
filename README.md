@@ -63,6 +63,8 @@ python test_browser.py
 
 ## Windows 安装器
 
+**2.1.0 安装包已生成并通过 Windows 验收：[下载页面](https://github.com/wrky02/TaskBoard/actions/runs/39020082997)。** 登录 GitHub，在 Artifacts 下载 `TaskBoard-Windows-2.1.0`，解压运行 `Setup_TaskBoard_2.1.0.exe`。发布者：wrky02。包含源码与安装后程序的托盘／关闭验证、发布者信息检查及卸载数据保留验证。
+
 在 Windows x64，安装 Python 3.12 和 Inno Setup 6 后执行：
 
 ```powershell
