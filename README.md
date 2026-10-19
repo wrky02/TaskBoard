@@ -1,4 +1,4 @@
-# 任务看板系统 3.0 · 原生 Windows 桌面版
+# 任务看板系统 3.0.1 · 原生 Windows 桌面版
 
 WPF 原生界面、本地 SQLite 数据和私有数据引擎。**不调用 Edge 或其他浏览器，不使用 WebView2、QtWebEngine、Electron，不启动 HTTP 服务。**
 
@@ -6,9 +6,13 @@ WPF 原生界面、本地 SQLite 数据和私有数据引擎。**不调用 Edge 
 
 ## 下载与使用
 
-**[3.0.0 成功构建与下载](https://github.com/wrky02/TaskBoard/actions/runs/39023528151)**。Windows 实际安装、原生控件、无浏览器进程/无 TCP 监听、托盘和卸载保留数据均通过。登录 GitHub，在 Artifacts 下载 `TaskBoard-Native-Windows-3.0.0`，解压运行 `Setup_TaskBoard_3.0.0.exe`。包内附带 SHA256SUMS.txt 与 SIGNING-STATUS.txt。
+**[3.0.1 安装包与成功构建](https://github.com/wrky02/TaskBoard/actions/runs/39185824351)**。登录 GitHub，在页面底部 Artifacts 下载 `TaskBoard-Native-Windows-3.0.1`（65.1 MB），解压运行 `Setup_TaskBoard_3.0.1.exe`。包内附带 SHA256SUMS.txt 与 SIGNING-STATUS.txt。
 
-尚未取得受信任的签名身份，当前包是**未签名**构建。已接入 Azure Artifact Signing 自动签名流程；申请与配置步骤见 [正式代码签名](docs/CODE-SIGNING.md)。wrky02 元数据不等于 Windows 的“已验证的发布者”。
+3.0.1 重做侧栏、统计区、筛选器、看板卡片、编辑窗口和月历；随包提供中文常规及粗体字体。已核对实际 Windows 截图，并通过安装、原生控件、字体资源、托盘和卸载保留数据验收。[版本说明](docs/releases/3.0.1.md) · [编辑窗口与月历截图](https://raw.githubusercontent.com/wrky02/TaskBoard/ee0ebc43c98e547f358ac256aa3bae074f36ccb7/date-picker.png)
+
+![3.0.1 Windows 实际看板](https://raw.githubusercontent.com/wrky02/TaskBoard/ee0ebc43c98e547f358ac256aa3bae074f36ccb7/board.png)
+
+当前继续通过 GitHub 分发 EXE，暂不申请证书或上架商店；安装包是**未签名**构建。已接入 Azure Artifact Signing 自动签名流程；申请与配置步骤见 [正式代码签名](docs/CODE-SIGNING.md)。wrky02 元数据不等于 Windows 的“已验证的发布者”。
 
 首次设置至少 8 位工作区密码。密码用于限制应用入口，数据库和附件不加密。所有任务和附件留在本机。默认数据目录为安装目录旁的 `Data`；设置页显示实际使用位置。安装目录不可写时使用历史用户目录，可通过 `--data-root` 或 `TASKBOARD_DATA_ROOT` 显式选择数据位置。
 

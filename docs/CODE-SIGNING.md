@@ -1,5 +1,7 @@
 # Windows 正式代码签名
 
+当前发布决定：保留 GitHub EXE，暂不推进证书申请或商店上架。以下接入说明供后续需要时参考。
+
 当前尚无受信任的签名身份，构建产物是**未签名**安装包。`AppPublisher=wrky02` 和 EXE 公司字段只控制显示元数据，不能使 Windows 显示“已验证的发布者”。签名链中的发布者必须是服务审核通过的真实个人或组织身份，未必能直接使用 GitHub 用户名 wrky02。
 
 ## 推荐申请：Microsoft Azure Artifact Signing

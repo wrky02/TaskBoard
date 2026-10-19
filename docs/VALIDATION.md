@@ -1,4 +1,17 @@
-# 2.1 / 2.0 开发验证
+# 任务看板验证记录
+
+## 3.0.1 原生 UI 修订 · 2026-10-19
+
+- 最终应用提交 `30f18100d3d4b201d31d61ed7cf07d2aaaffa723`；[Windows 完整构建](https://github.com/wrky02/TaskBoard/actions/runs/39185824351) 成功，安装制品 `TaskBoard-Native-Windows-3.0.1`（65.1 MB）。其后提交仅更新交付文档。
+- 本地原生编译零警告、零错误。27 项业务回归及旧存储/迁移测试通过；Windows 构建再次执行同一组数据测试。
+- 安装后的 `--verify-ui-resources` 检查确认 Normal 从 `NotoSansSC-Regular.ttf` 解析，SemiBold/Bold 从 `NotoSansSC-Bold.ttf` 解析，含中文任务字形；字体许可随包提供。
+- `scripts/check-native.py` 验证原生输入与 Enter、草稿/剪贴板图片恢复、优先级、检查项、日期快捷操作、无改动关闭、锁定解锁、托盘、重复启动唤醒和退出。监控结果无浏览器进程、无 TCP 监听。
+- `scripts/capture-native.py` 使用独立演示工作区，验证更多菜单、月历七个星期标题、前后月份切换，并截取真实看板、批量模式、编辑窗口、日期弹窗、我的今天、空搜索和窄窗口。已实际打开并核对最终截图。
+- [固定版本截图](https://github.com/wrky02/TaskBoard/tree/ee0ebc43c98e547f358ac256aa3bae074f36ccb7)，对应同一个应用提交。预览分支只保存演示截图及说明，不包含用户数据库、附件或凭据。
+- 实际 EXE 安装、发布者元数据 wrky02、卸载后 Data 每个文件 SHA-256 保持一致均通过。
+- 按当前发布决定，保留 GitHub EXE，暂不申请证书或上架商店。此包未签名。
+- 尚需实机确认的范围：微软/搜狗等真实中文 IME 候选窗、高 DPI、多显示器、旧固定快捷方式缓存。自动化文字输入不等于真实输入法候选窗验收。
+
 
 ## 3.0 原生 Windows 重构
 
