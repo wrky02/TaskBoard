@@ -21,10 +21,14 @@ internal sealed class App : Application
         app.Resources["AppFont"]=Ui.Font;
         // Installer acceptance checks the actual packaged font, not just its requested family name.
         if(Array.IndexOf(args,"--verify-ui-resources")>=0){
-            var typeface=new System.Windows.Media.Typeface(Ui.Font,FontStyles.Normal,FontWeights.Normal,FontStretches.Normal);
-            bool resolved=typeface.TryGetGlyphTypeface(out var face);
-            bool valid=resolved&&face.CharacterToGlyphMap.ContainsKey('任')&&face.CharacterToGlyphMap.ContainsKey('务')&&face.FontUri.ToString().Contains("NotoSansSC",StringComparison.OrdinalIgnoreCase);
-            if(args.Length>1)File.WriteAllText(args[1],System.Text.Json.JsonSerializer.Serialize(new {valid,resolved,font=face?.FontUri.ToString(),bundled=File.Exists(Path.Combine(AppContext.BaseDirectory,"Fonts","NotoSansSC-Regular.ttf"))}));
+            bool valid=true;var report=new System.Collections.Generic.List<object>();
+            foreach(var weight in new[]{FontWeights.Normal,FontWeights.SemiBold,FontWeights.Bold}){
+                var typeface=new System.Windows.Media.Typeface(Ui.Font,FontStyles.Normal,weight,FontStretches.Normal);
+                bool resolved=typeface.TryGetGlyphTypeface(out var face);
+                bool loaded=resolved&&face.CharacterToGlyphMap.ContainsKey('任')&&face.CharacterToGlyphMap.ContainsKey('务')&&face.FontUri.ToString().Contains("NotoSansSC",StringComparison.OrdinalIgnoreCase);
+                valid&=loaded;report.Add(new{weight=weight.ToString(),loaded,resolved,font=face?.FontUri.ToString()});
+            }
+            if(args.Length>1)File.WriteAllText(args[1],System.Text.Json.JsonSerializer.Serialize(new {valid,faces=report}));
             Environment.ExitCode=valid?0:1;return;
         }
         var data=Environment.GetEnvironmentVariable("TASKBOARD_DATA_ROOT")??Path.Combine(AppContext.BaseDirectory,"Data");
