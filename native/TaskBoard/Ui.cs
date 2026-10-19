@@ -8,7 +8,7 @@ using System.Windows.Automation;
 namespace TaskBoard;
 internal static class Ui
 {
-    public static FontFamily Font=new("pack://application:,,,/TaskBoard;component/fonts/#Noto Sans SC");
+    public static FontFamily Font=new(new Uri(AppContext.BaseDirectory), "./Fonts/#Noto Sans SC");
     public static Brush Ink=new SolidColorBrush(System.Windows.Media.Color.FromRgb(34,42,63)), Muted=new SolidColorBrush(System.Windows.Media.Color.FromRgb(110,120,141)), Purple=new SolidColorBrush(System.Windows.Media.Color.FromRgb(112,99,237)), Surface=new SolidColorBrush(System.Windows.Media.Color.FromRgb(245,246,251));
     public static TextBlock Text(string text, double size=14, Brush? color=null)=>new() { Text=text, FontSize=size, Foreground=color??Ink, TextWrapping=TextWrapping.Wrap, Margin=new Thickness(0,4,0,4) };
     public static TextBox Input(string value="", string id="") {

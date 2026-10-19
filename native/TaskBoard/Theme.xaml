@@ -104,7 +104,7 @@
   </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style x:Key="TaskCalendar" TargetType="Calendar">
-  <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#DED9F6"/><Setter Property="Padding" Value="10"/><Setter Property="FontFamily" Value="pack://application:,,,/TaskBoard;component/fonts/#Noto Sans SC"/>
+  <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#DED9F6"/><Setter Property="Padding" Value="10"/><Setter Property="FontFamily" Value="{DynamicResource AppFont}"/>
   <Setter Property="CalendarDayButtonStyle" Value="{StaticResource CalendarDay}"/>
   <Setter Property="CalendarItemStyle"><Setter.Value><Style TargetType="CalendarItem"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CalendarItem">
    <ControlTemplate.Resources><DataTemplate x:Key="{x:Static CalendarItem.DayTitleTemplateResourceKey}"><TextBlock Text="{Binding}" HorizontalAlignment="Center" Foreground="#8D96AA" FontSize="11" Margin="0,4,0,6"/></DataTemplate></ControlTemplate.Resources>
