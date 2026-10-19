@@ -18,7 +18,7 @@ import features as f
 import domain
 from instance_lock import InstanceLock
 
-VERSION = '3.0.0'
+VERSION = '3.0.1'
 
 class Worker:
     def __init__(self):

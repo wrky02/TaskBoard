@@ -24,7 +24,7 @@ internal sealed partial class BoardWindow
     }
     Task Tags()
     {
-        Window? window=null;var list=new StackPanel();var input=Ui.Input("","tagName");input.Width=320;
+        Window? window=null;var list=new StackPanel();var input=Ui.Input("","tagName");input.Width=320;Ui.Hint(input,"输入新标签名称，按 Enter 添加…");
         void Draw(){list.Children.Clear();foreach(var node in State.A("tags")){
             var t=node!.Copy();var color=Ui.Combo(new[]{"紫色","蓝色","绿色","橙色","红色","灰色"},Array.IndexOf(new[]{"purple","blue","green","orange","red","gray"},t.S("color")));
             color.SelectionChanged+=async(_,_)=>{try{Accept(await rpc.Call("tag",J.Obj(("id",t.I("id")),("action","color"),("color",new[]{"purple","blue","green","orange","red","gray"}[color.SelectedIndex]))));}catch(Exception ex){Ui.Error(ex.Message);}};
@@ -78,7 +78,7 @@ internal sealed partial class BoardWindow
     Task Settings()
     {
         var names=State["names"];var system=Ui.Input(names.S("system_name","任务看板系统"));var user=Ui.Input(names.S("user_name","我"));var close=Ui.Combo(new[]{"每次询问","退出程序","最小化到托盘"},Array.IndexOf(new[]{"ask","exit","tray"},State["info"].S("close_behavior","ask")),"closeBehavior");
-        var info=State["info"];var panel=Ui.Column(Ui.Text("设置与数据",25),Ui.Text("3.0.0 · 原生 WPF · 发布者 wrky02",14,Ui.Purple),Ui.Text("数据位置："+info.S("data_path")),Ui.Text("最近自动备份："+info.S("last_backup","暂无")+" · 共 "+info.I("backup_count")+" 份"),Ui.Text("每日首次启动备份，保留最近 7 份。备份包含任务、附件与密码设置。",12,Ui.Muted));
+        var info=State["info"];var panel=Ui.Column(Ui.Text("设置与数据",25),Ui.Text("3.0.1 · 原生 WPF · 发布者 wrky02",14,Ui.Purple),Ui.Text("数据位置："+info.S("data_path")),Ui.Text("最近自动备份："+info.S("last_backup","暂无")+" · 共 "+info.I("backup_count")+" 份"),Ui.Text("每日首次启动备份，保留最近 7 份。备份包含任务、附件与密码设置。",12,Ui.Muted));
         if(info.S("backup_error")!="")panel.Children.Add(Ui.Text("备份失败："+info.S("backup_error"),13,Brushes.IndianRed));
         panel.Children.Add(Ui.Section("个性化与关闭行为",Ui.Column(Ui.Text("系统名称"),system,Ui.Text("工作区名称"),user,Ui.Text("点击窗口 × 时"),close,Ui.Button("保存设置",async()=>{Accept(await rpc.Call("settings",J.Obj(("system_name",system.Text),("user_name",user.Text),("close_behavior",new[]{"ask","exit","tray"}[Math.Max(0,close.SelectedIndex)]))));},"saveSettings",true))));
         panel.Children.Add(Ui.Section("备份、迁移与导出",Ui.Column(Ui.Row(Ui.Button("创建完整备份",()=>Export("zip"),"backup"),Ui.Button("从 ZIP 恢复",()=>Import(false),"restoreZip"),Ui.Button("导入旧版 Data 目录",()=>Import(true),"importData")),Ui.Row(Ui.Button("导出 CSV",()=>Export("csv")),Ui.Button("导出 Excel",()=>Export("xlsx"))),Ui.Text("导入会替换当前数据。先预览并确认，恢复前自动创建安全备份。",12,Ui.Muted))));

@@ -21,7 +21,13 @@ internal sealed partial class BoardWindow : Window
     readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromSeconds(20)};
     readonly HashSet<string> notified=new();
     internal bool Unlocked;
-    bool exiting,refreshing,loadingFilters;
+    bool exiting,refreshing,loadingFilters,batchMode;
+    readonly Dictionary<string,Button> navigation=new();
+    readonly DispatcherTimer undoTimer=new(){Interval=TimeSpan.FromSeconds(1)};
+    TextBlock pageHeading=new(),pageSubtitle=new(),selectionText=new();
+    StackPanel stats=new();
+    Border batchBar=new();
+    Button undoButton=new();
     string page="看板",undo="";
     DateTime undoUntil;
     DateTime renderedDay=DateTime.Today;
@@ -45,7 +51,9 @@ internal sealed partial class BoardWindow : Window
         tray.DoubleClick+=(_,_)=>Dispatcher.Invoke(Reopen);tray.BalloonTipClicked+=(_,_)=>Dispatcher.Invoke(Reopen);
         Loaded+=async (_,_)=>await Login();
         timer.Tick+=async (_,_)=>{if(Unlocked&&!refreshing){refreshing=true;try{await PollReminders();if(renderedDay!=DateTime.Today){renderedDay=DateTime.Today;Render();}}catch(Exception ex){footer.Text=ex.Message;}finally{refreshing=false;}}};timer.Start();
-        Closing+=OnClosing;Closed+=(_,_)=>{timer.Stop();tray.Visible=false;tray.Dispose();};
+        undoTimer.Tick+=(_,_)=>{undoButton.Visibility=undo!=""&&DateTime.Now<=undoUntil?Visibility.Visible:Visibility.Collapsed;};undoTimer.Start();
+        SizeChanged+=(_,_)=>stats.Visibility=ActualHeight<740?Visibility.Collapsed:Visibility.Visible;
+        Closing+=OnClosing;Closed+=(_,_)=>{timer.Stop();undoTimer.Stop();tray.Visible=false;tray.Dispose();};
     }
     internal void Reopen(){Show();WindowState=WindowState.Normal;Activate();}
     void OnClosing(object? sender,System.ComponentModel.CancelEventArgs e)
@@ -78,40 +86,67 @@ internal sealed partial class BoardWindow : Window
     }
     void BuildShell()
     {
-        selected.Clear();sidebar=new StackPanel{Margin=new Thickness(18)};
-        var logo=Ui.Row(new Image{Source=Icon,Width=40,Height=40,Margin=new Thickness(0,0,8,0)},Ui.Text("任务看板",19,Brushes.White));sidebar.Children.Add(logo);sidebar.Children.Add(Ui.Text("NATIVE WORKSPACE  /  3.0",10,Brushes.LightSteelBlue));
-        foreach(string name in new[]{"看板","我的今天","日历","已归档","回收站"})sidebar.Children.Add(Ui.Button(name,()=>{page=name;selected.Clear();Render();},"nav"+name));
-        sidebar.Children.Add(Ui.Text("管理工作区",12,Brushes.LightSteelBlue));
-        sidebar.Children.Add(Ui.Button("标签管理",Tags,"tags"));sidebar.Children.Add(Ui.Button("草稿恢复",Drafts,"drafts"));
-        sidebar.Children.Add(Ui.Button("操作记录",Activity));sidebar.Children.Add(Ui.Button("设置与备份",Settings,"settings"));
-        sidebar.Children.Add(Ui.Button("锁定工作区",async()=>{await rpc.Call("lock");await Login();},"lock"));
-        sidebar.Children.Add(Ui.Text("常用视图",12,Brushes.LightSteelBlue));
-        foreach(var v in State.A("views")){var view=v!.Copy();sidebar.Children.Add(Ui.Button(view.S("name"),()=>ApplyView(view)));}
-        foreach(var button in sidebar.Children.OfType<Button>()){button.Background=Brushes.Transparent;button.Foreground=Brushes.White;button.BorderThickness=new Thickness(0);button.HorizontalContentAlignment=HorizontalAlignment.Left;button.Margin=new Thickness(0,4,0,4);}
-        layout=new DockPanel();var rail=new Border{Width=215,Background=new SolidColorBrush(Color.FromRgb(27,36,55)),Child=Ui.Scroll(sidebar)};DockPanel.SetDock(rail,Dock.Left);layout.Children.Add(rail);
-        var main=new DockPanel{Margin=new Thickness(25,18,16,12)};
-        var heading=Ui.Text(string.IsNullOrWhiteSpace(State["names"].S("system_name"))?"我的工作空间":State["names"].S("system_name"),26);var headingRow=Ui.Row(heading,Ui.Text("   "+State["names"].S("user_name","我的工作区"),14,Ui.Muted));
-        search=Ui.Input("","search");search.Width=220;search.ToolTip="搜索任务标题和正文";
+        selected.Clear();batchMode=false;navigation.Clear();
+        sidebar=new StackPanel{Margin=new Thickness(16,24,16,12)};
+        var brand=Ui.Row(Ui.Logo(38),new Border{Margin=new Thickness(11,0,0,0),Child=Ui.Column(new TextBlock{Text="任务看板",Foreground=Brushes.White,FontWeight=FontWeights.SemiBold,FontSize=17},new TextBlock{Text="PERSONAL WORKSPACE",Foreground=Ui.Color("#8591AB"),FontSize=8,Margin=new Thickness(0,6,0,0)})});
+        sidebar.Children.Add(new Border{Child=brand,Margin=new Thickness(4,0,0,30)});
+        foreach(var (name,glyph) in new[]{("看板","\uE80A"),("我的今天","\uE706"),("日历","\uE787"),("已归档","\uE7B8"),("回收站","\uE74D")}){
+            var button=Nav(name,glyph,()=>{page=name;selected.Clear();Render();},"nav"+name);navigation[name]=button;sidebar.Children.Add(button);
+        }
+        sidebar.Children.Add(RailLabel("工作区管理"));
+        sidebar.Children.Add(Nav("标签管理","\uE8EC",Tags,"tags"));sidebar.Children.Add(Nav("草稿恢复","\uE70F",Drafts,"drafts"));sidebar.Children.Add(Nav("操作记录","\uE81C",Activity));
+        sidebar.Children.Add(RailLabel("常用视图"));
+        foreach(var v in State.A("views")){var view=v!.Copy();sidebar.Children.Add(Nav(view.S("name"),"\uE734",()=>ApplyView(view)));}
+        if(State.A("views").Count==0)sidebar.Children.Add(new Border{Padding=new Thickness(12,4,8,8),Child=Ui.Text("保存筛选条件，在这里快速打开",11,Ui.Color("#8995AC"))});
+        var railContent=new DockPanel();var railBottom=Ui.Column(Nav("设置与备份","\uE713",Settings,"settings"),Nav("锁定工作区","\uE72E",async()=>{await rpc.Call("lock");await Login();},"lock"),Ui.Text("  ●  本地工作区     /     3.0.1",10,Ui.Color("#8995AC")));railBottom.Margin=new Thickness(16,12,16,16);DockPanel.SetDock(railBottom,Dock.Bottom);railContent.Children.Add(railBottom);railContent.Children.Add(Ui.Scroll(sidebar));
+        layout=new DockPanel();var rail=new Border{Width=218,Background=Ui.Color("#1C2538"),Child=railContent};DockPanel.SetDock(rail,Dock.Left);layout.Children.Add(rail);
+        var main=new DockPanel{Margin=new Thickness(28,20,28,12)};
+        var breadcrumb=new DockPanel{Margin=new Thickness(0,0,0,20)};
+        var profile=Ui.Row(Ui.Chip("●  本地保存",Ui.Color("#498D7C"),Ui.Color("#EAF4EF")),new Border{Margin=new Thickness(10,0,0,0),Child=Ui.Chip(State["names"].S("user_name", "我") is string user&&user!=""?user:"我",Ui.Purple)});DockPanel.SetDock(profile,Dock.Right);breadcrumb.Children.Add(profile);
+        breadcrumb.Children.Add(Ui.Text((string.IsNullOrWhiteSpace(State["names"].S("system_name"))?"我的工作空间":State["names"].S("system_name"))+"    /    任务管理",11,Ui.Muted));
+        pageHeading=Ui.Text("工作看板",26);pageHeading.FontWeight=FontWeights.Bold;pageHeading.Margin=new Thickness(0,3,0,6);pageSubtitle=Ui.Text("把想法变成行动，让重要的事有序发生。",12,Ui.Muted);
+        var heading=new DockPanel{Margin=new Thickness(0,0,0,18)};var create=Ui.Button("＋  新建任务",()=>Edit(null),"newTask",true);create.VerticalAlignment=VerticalAlignment.Center;create.Margin=new Thickness(12,0,0,0);DockPanel.SetDock(create,Dock.Right);heading.Children.Add(create);heading.Children.Add(Ui.Column(new TextBlock{Text="WORK OVERVIEW",Foreground=Ui.Purple,FontSize=9,FontWeight=FontWeights.SemiBold},pageHeading,pageSubtitle));
+        stats=new StackPanel{Visibility=ActualHeight<740?Visibility.Collapsed:Visibility.Visible};stats.Margin=new Thickness(0,0,0,16);
+        search=Ui.Input("","search");search.Width=190;Ui.Hint(search,"搜索任务标题或正文…");
         priority=Ui.Combo(new[]{"全部优先级","紧急","高","普通","低"});stage=Ui.Combo(new[]{"全部状态","计划中","进行中","完成"});
         dueFilter=Ui.Combo(new[]{"全部日期","今天到期","已逾期","本周到期","无截止日期"});sort=Ui.Combo(new[]{"手动排序","优先级排序","截止日期排序","最近更新"});
         tag=Ui.Combo(new[]{"全部标签"}.Concat(State.A("tags").Select(t=>t.S("name"))).ToArray());
-        var filters=Ui.Row(search,priority,stage,tag,dueFilter,sort,Ui.Button("保存视图",SaveView));
-        var quick=Ui.Input("","quickTitle");quick.Width=350;quick.ToolTip="输入任务标题，回车创建";
+        var filters=Ui.Row(search,priority,stage,tag,dueFilter,sort,Ui.Quiet("保存视图",SaveView),Ui.Quiet("↻",Refresh,"refresh"));
+        var quick=Ui.Input("","quickTitle");Ui.Hint(quick,"＋  记录一个新任务，按 Enter 添加…");quick.Margin=new Thickness(0,0,10,0);
         async Task Quick(){if(string.IsNullOrWhiteSpace(quick.Text))return;var result=await rpc.Call("save",J.Obj(("title",quick.Text),("status","计划中")));quick.Clear();Accept(result);}
-        // WPF IME composition events retain native candidate handling; ignore the
-        // IME-processed key so confirming a candidate cannot create a task.
         quick.KeyDown+=async(_,e)=>{if(e.Key==Key.Enter){e.Handled=true;try{await Quick();}catch(Exception ex){Ui.Error(ex.Message);}}};
-        var actions=Ui.Row(quick,Ui.Button("快速添加",Quick,"quickAdd",true),Ui.Button("详细新建",()=>Edit(null),"newTask"),Ui.Button("批量编辑",Bulk,"bulk"),Ui.Button("刷新",Refresh,"refresh"));
-        reminders=new StackPanel();var top=Ui.Column(headingRow,filters,actions,reminders);DockPanel.SetDock(top,Dock.Top);main.Children.Add(top);
-        footer=Ui.Text("数据已保存到本机",12,Ui.Muted);
-        var bottom=Ui.Row(footer,Ui.Button("撤销上次操作",async()=>{if(undo==""||DateTime.Now>undoUntil)throw new InvalidOperationException("没有可撤销的操作，撤销有效期为 15 秒");Accept(await rpc.Call("undo",J.Obj(("key",undo))));undo="";},"undo"));DockPanel.SetDock(bottom,Dock.Bottom);main.Children.Add(bottom);
-        body=new ContentControl();main.Children.Add(body);layout.Children.Add(main);Content=layout;
+        var entry=new DockPanel{Margin=new Thickness(0,0,0,8)};var add=Ui.Button("添加任务",Quick,"quickAdd",true);add.Margin=new Thickness(0);DockPanel.SetDock(add,Dock.Right);entry.Children.Add(add);var batch=Ui.Button("批量选择",()=>{batchMode=!batchMode;selected.Clear();Render();},"batchSelect");batch.Margin=new Thickness(10,0,0,0);DockPanel.SetDock(batch,Dock.Right);entry.Children.Add(batch);entry.Children.Add(quick);
+        selectionText=Ui.Text("",12,Ui.Purple);var apply=Ui.Button("编辑选中任务",Bulk,"bulk",true);
+        var selectAll=Ui.Button("全选当前结果",()=>{foreach(var task in Filtered())selected.Add(task.I("id"));Render();});
+        var cancel=Ui.Quiet("取消选择",()=>{batchMode=false;selected.Clear();Render();return Task.CompletedTask;});
+        batchBar=new Border{Background=Ui.Color("#EDEAFF"),CornerRadius=new CornerRadius(8),Padding=new Thickness(12,3,8,3),Margin=new Thickness(0,4,0,10),Child=Ui.Row(selectionText,selectAll,apply,cancel),Visibility=Visibility.Collapsed};
+        reminders=new StackPanel();var top=Ui.Column(breadcrumb,heading,stats,entry,filters,batchBar,reminders);top.Margin=new Thickness(0,0,0,12);DockPanel.SetDock(top,Dock.Top);main.Children.Add(top);
+        footer=Ui.Text("●  数据已保存到本机",11,Ui.Muted);
+        undoButton=Ui.Quiet("撤销操作",async()=>{if(undo==""||DateTime.Now>undoUntil)return;Accept(await rpc.Call("undo",J.Obj(("key",undo))));undo="";undoButton.Visibility=Visibility.Collapsed;},"undo");undoButton.Visibility=Visibility.Collapsed;
+        var bottom=new DockPanel{Margin=new Thickness(0,6,0,0)};DockPanel.SetDock(undoButton,Dock.Right);bottom.Children.Add(undoButton);bottom.Children.Add(footer);DockPanel.SetDock(bottom,Dock.Bottom);main.Children.Add(bottom);
+        body=new ContentControl{HorizontalContentAlignment=HorizontalAlignment.Stretch,VerticalContentAlignment=VerticalAlignment.Stretch};main.Children.Add(body);layout.Children.Add(main);Content=layout;
         search.TextChanged+=(_,_)=>Render();foreach(var c in new[]{priority,stage,tag,dueFilter,sort})c.SelectionChanged+=(_,_)=>{if(!loadingFilters)Render();};Render();
+    }
+    TextBlock RailLabel(string text){var t=Ui.Text(text,10,Ui.Color("#7E8CA7"));t.Margin=new Thickness(12,24,0,8);return t;}
+    Button Nav(string name,string glyph,Action action,string id="")=>Nav(name,glyph,()=>{action();return Task.CompletedTask;},id);
+    Button Nav(string name,string glyph,Func<Task> action,string id="")
+    {
+        var b=Ui.Button(name,action,id);b.Content=Ui.Row(Ui.Glyph(glyph,16,Ui.Color("#A9B5CD")),new TextBlock{Text=name,FontSize=13,VerticalAlignment=VerticalAlignment.Center});b.Background=Brushes.Transparent;b.Foreground=Ui.Color("#BBC5D9");b.BorderThickness=new Thickness(0);b.HorizontalContentAlignment=HorizontalAlignment.Left;b.Padding=new Thickness(12,12,8,12);b.Margin=new Thickness(0,2,0,2);return b;
+    }
+    void UpdateOverview()
+    {
+        pageHeading.Text=page=="看板"?"工作看板":page;
+        pageSubtitle.Text=page switch {"我的今天"=>"专注今天的安排。加入今日计划，不改变截止日期。","日历"=>"按日期安排工作，让每个截止时间都清晰可见。","已归档"=>"妥善收起已完成的工作，随时回顾。","回收站"=>"误删的任务可以恢复，永久删除后无法撤销。",_=>"把想法变成行动，让重要的事有序发生。"};
+        foreach(var (name,b) in navigation){bool active=name==page;b.Background=active?Ui.Purple:Brushes.Transparent;b.Foreground=active?Brushes.White:Ui.Color("#BBC5D9");if(b.Content is WrapPanel row&&row.Children[0] is TextBlock icon)icon.Foreground=active?Brushes.White:Ui.Color("#A9B5CD");}
+        batchBar.Visibility=batchMode?Visibility.Visible:Visibility.Collapsed;selectionText.Text=$"已选择 {selected.Count} 项   ";
+        stats.Children.Clear();var all=State.A("tasks");var grid=new Grid();for(int i=0;i<4;i++)grid.ColumnDefinitions.Add(new ColumnDefinition());
+        var values=new[]{("全部任务",all.Count,"\uE80A","#7063ED","#F0EEFF"),("进行中",all.Count(t=>t.S("status")=="进行中"),"\uE916","#C5903F","#FBF3E6"),("已完成",all.Count(t=>t.S("status")=="完成"),"\uE73E","#4D9B83","#EBF5EF"),("已逾期",all.Count(t=>t.S("status")!="完成"&&DateTime.TryParse(t.S("due_date"),out var d)&&d.Date<DateTime.Today),"\uE823","#D2767D","#FCEDF0")};
+        for(int i=0;i<values.Length;i++){var(label,count,icon,ink,bg)=values[i];var panel=new DockPanel();var symbol=Ui.Glyph(icon,19,Ui.Color(ink));symbol.Margin=new Thickness(0);var tile=new Border{Width=38,Height=38,Background=Ui.Color(bg),CornerRadius=new CornerRadius(10),Child=symbol,VerticalAlignment=VerticalAlignment.Center};symbol.HorizontalAlignment=HorizontalAlignment.Center;DockPanel.SetDock(tile,Dock.Right);panel.Children.Add(tile);var number=Ui.Text(count.ToString(),25);number.FontFamily=new FontFamily("Segoe UI");number.FontWeight=FontWeights.SemiBold;number.Margin=new Thickness(0,3,0,0);panel.Children.Add(Ui.Column(Ui.Text(label,11,Ui.Muted),number));var card=Ui.Card(panel);card.Padding=new Thickness(16,11,16,11);card.Margin=new Thickness(0,0,i==3?0:12,0);Grid.SetColumn(card,i);grid.Children.Add(card);}stats.Children.Add(grid);
     }
     internal void Accept(JsonObject result)
     {
         State=result["state"] is JsonObject s?s.Copy():result.Copy();
-        if(result.S("undo")!=""){undo=result.S("undo");undoUntil=DateTime.Now.AddSeconds(15);footer.Text="操作已完成，可在 15 秒内撤销";}else footer.Text="已保存 · "+DateTime.Now.ToString("HH:mm:ss");
+        if(result.S("undo")!=""){undo=result.S("undo");undoUntil=DateTime.Now.AddSeconds(15);undoButton.Visibility=Visibility.Visible;footer.Text="操作已完成，可在 15 秒内撤销";}else footer.Text="已保存 · "+DateTime.Now.ToString("HH:mm:ss");
         Render();
     }
     internal async Task Refresh(){Accept(await rpc.Call("state"));}
@@ -129,54 +164,65 @@ internal sealed partial class BoardWindow : Window
     }
     void Render()
     {
-        if(!Unlocked||loadingFilters)return;
+        if(!Unlocked||loadingFilters)return;UpdateOverview();
         var tasks=Filtered().ToList();
         if(page=="日历"){RenderCalendar(tasks);return;}
         var columns=new Grid();foreach(var _ in Stages)columns.ColumnDefinitions.Add(new ColumnDefinition());
         for(int i=0;i<Stages.Length;i++){
             string status=Stages[i];var list=tasks.Where(t=>t.S("status")==status).ToList();
-            var stack=new StackPanel();stack.Children.Add(Ui.Text(status+"  "+list.Count,18));foreach(var task in list)stack.Children.Add(TaskCard(task));
-            if(list.Count==0)stack.Children.Add(Ui.Text("暂无任务",13,Ui.Muted));
+            var lane=new DockPanel();var header=new DockPanel{Margin=new Thickness(4,0,4,14)};
+            var plus=Ui.Quiet("＋",()=>Edit(J.Obj(("status",status))));plus.ToolTip="在“"+status+"”中新建任务";plus.Padding=new Thickness(6,0,6,0);plus.MinHeight=24;plus.Margin=new Thickness(0);DockPanel.SetDock(plus,Dock.Right);header.Children.Add(plus);
+            header.Children.Add(Ui.Row(Ui.Text("●",11,Ui.Color(new[]{"#9B91E7","#D5A258","#67A68F"}[i])),new TextBlock{Text=status,FontSize=14,FontWeight=FontWeights.SemiBold,Foreground=Ui.Ink,Margin=new Thickness(8,3,8,0)},Ui.Chip(list.Count.ToString(),Ui.Muted,Ui.Color("#E6E8F1"))));DockPanel.SetDock(header,Dock.Top);lane.Children.Add(header);
+            var stack=new StackPanel();foreach(var task in list)stack.Children.Add(TaskCard(task));
+            if(list.Count==0){var empty=Ui.Column(Ui.Glyph(i==2?"\uE73E":"\uE8A5",27,Ui.Color("#B6BACE")),Ui.Text(i==2?"完成的任务会出现在这里":"暂无任务",13,Ui.Muted),Ui.Text(tasks.Count==0&&search.Text!=""?"试试其他关键词或筛选条件":"让工作一步步向前",11,Ui.Color("#9AA3B6")));foreach(FrameworkElement item in empty.Children)item.HorizontalAlignment=HorizontalAlignment.Center;stack.Children.Add(new Border{Child=empty,Padding=new Thickness(8,34,8,34),BorderBrush=Ui.Color("#DFE3EE"),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(10),Margin=new Thickness(0,0,0,12)});}
+            if(page is "看板" or "我的今天"){var add=Ui.Quiet("＋  添加任务",()=>Edit(J.Obj(("status",status))));add.HorizontalAlignment=HorizontalAlignment.Stretch;add.Foreground=Ui.Muted;stack.Children.Add(add);}
             var scroller=Ui.Scroll(stack);scroller.AllowDrop=page is "看板" or "我的今天";
-            scroller.Drop+=async(_,e)=>{if(e.Data.GetData("TaskBoard.Task") is int tid){try{Accept(await rpc.Call("action",J.Obj(("action","move"),("id",tid),("status",status))));}catch(Exception ex){Ui.Error(ex.Message);}}};
-            Grid.SetColumn(scroller,i);columns.Children.Add(scroller);
+            scroller.Drop+=async(_,e)=>{if(e.Data.GetData("TaskBoard.Task") is int tid){try{Accept(await rpc.Call("action",J.Obj(("action","move"),("id",tid),("status",status))));}catch(Exception ex){Ui.Error(ex.Message);}}};lane.Children.Add(scroller);
+            var shell=new Border{Background=Ui.Color("#EEF0F7"),CornerRadius=new CornerRadius(12),Padding=new Thickness(12,14,12,12),Margin=new Thickness(0,0,i==2?0:14,0),Child=lane};Grid.SetColumn(shell,i);columns.Children.Add(shell);
         }
         body.Content=columns;
     }
     Border TaskCard(JsonObject task)
     {
-        int id=task.I("id"),p=task["options"].I("priority",2);var content=new StackPanel();
-        var check=Ui.Check("#"+id,selected.Contains(id));check.Checked+=(_,_)=>selected.Add(id);check.Unchecked+=(_,_)=>selected.Remove(id);
-        content.Children.Add(Ui.Row(check,Ui.Text(Priorities[Math.Clamp(p,0,3)],12,p<2?Brushes.IndianRed:Ui.Muted)));
-        var title=Ui.Button(task.S("title"),()=>Edit(task),"task-"+id);title.Content=Ui.Text(task.S("title"),16);title.HorizontalContentAlignment=HorizontalAlignment.Left;content.Children.Add(title);
-        var note=task.S("note");if(note.Length>0)content.Children.Add(Ui.Text(note.Length>90?note[..90]+"…":note,12,Ui.Muted));
-        if(task.S("due_date")!="")content.Children.Add(Ui.Text(Ui.Due(task.S("due_date"))+" · "+task.S("due_date"),12,task.S("due_date").CompareTo(DateTime.Today.ToString("yyyy-MM-dd"))<0&&task.S("status")!="完成"?Brushes.IndianRed:Ui.Muted));
-        if(task.A("tags").Count>0){var chips=Ui.Row();foreach(var t in task.A("tags"))chips.Children.Add(new Border{CornerRadius=new CornerRadius(5),Padding=new Thickness(5,1,5,1),Margin=new Thickness(0,3,5,3),Background=TagBrush(t.S("color")),Child=Ui.Text(t.S("name"),11,Brushes.White)});content.Children.Add(chips);}
-        if(task.A("checklist").Count>0)content.Children.Add(Ui.Text($"检查清单  {task.A("checklist").Count(c=>c.B("done"))}/{task.A("checklist").Count}",12,Ui.Muted));
-        if(task.A("files").Count>0)content.Children.Add(Ui.Text($"附件 {task.A("files").Count}",12,Ui.Muted));
-        if(task.A("blocked").Count>0)content.Children.Add(Ui.Text("等待："+string.Join("、",task.A("blocked").Select(d=>d.S("title"))),12,Brushes.DarkOrange));
-        if(task["options"].S("repeat","off")!="off")content.Children.Add(Ui.Text("↻ 重复任务",12,Ui.Purple));
-        var actions=Ui.Row();
-        if(page=="回收站"){actions.Children.Add(ActionButton("恢复",id,"restore"));actions.Children.Add(Ui.Button("永久删除",async()=>{if(Ui.Confirm("永久删除任务和附件？此操作无法撤销。"))Accept(await rpc.Call("action",J.Obj(("id",id),("action","erase"))));}));}
-        else if(page=="已归档")actions.Children.Add(ActionButton("取消归档",id,"unarchive"));
-        else {
-            actions.Children.Add(Ui.Button(task["options"].S("today")==DateTime.Today.ToString("yyyy-MM-dd")?"移出今日":"加入今日",async()=>{
-                var payload=Payload(task);payload["options"]!["today"]=task["options"].S("today")==DateTime.Today.ToString("yyyy-MM-dd")?"":DateTime.Today.ToString("yyyy-MM-dd");Accept(await rpc.Call("save",payload));}));
-            if(task.S("status")=="完成")actions.Children.Add(ActionButton("归档",id,"archive"));else actions.Children.Add(Ui.Button("完成",async()=>Accept(await rpc.Call("action",J.Obj(("id",id),("action","move"),("status","完成"))))));
-            actions.Children.Add(ActionButton("复制",id,"duplicate"));actions.Children.Add(ActionButton("删除",id,"trash"));
+        int id=task.I("id"),p=Math.Clamp(task["options"].I("priority",2),0,3);var content=new StackPanel();
+        var top=new DockPanel();var menu=new ContextMenu();
+        void Menu(string label,Func<Task> action){var item=new MenuItem{Header=label,Padding=new Thickness(10,7,16,7)};item.Click+=async(_,_)=>{try{await action();}catch(Exception ex){Ui.Error(ex.Message);}};menu.Items.Add(item);}
+        Task Act(string action)=>RunAction(id,action);
+        Menu("打开任务",()=>Edit(task));
+        if(page=="回收站"){Menu("恢复任务",()=>Act("restore"));Menu("永久删除…",async()=>{if(Ui.Confirm("永久删除任务和附件？此操作无法撤销。"))await Act("erase");});}
+        else if(page=="已归档")Menu("取消归档",()=>Act("unarchive"));
+        else{
+            Menu(task["options"].S("today")==DateTime.Today.ToString("yyyy-MM-dd")?"移出今日计划":"加入今日计划",async()=>{var payload=Payload(task);payload["options"]!["today"]=task["options"].S("today")==DateTime.Today.ToString("yyyy-MM-dd")?"":DateTime.Today.ToString("yyyy-MM-dd");Accept(await rpc.Call("save",payload));});
+            if(task.S("status")=="完成")Menu("归档任务",()=>Act("archive"));else Menu("标记为完成",async()=>Accept(await rpc.Call("action",J.Obj(("id",id),("action","move"),("status","完成")))));
+            Menu("复制任务",()=>Act("duplicate"));menu.Items.Add(new Separator());Menu("移至回收站",()=>Act("trash"));
         }
-        content.Children.Add(actions);var card=Ui.Card(content);
+        var more=Ui.Quiet("⋯",()=>Task.CompletedTask,"more-"+id);more.ContextMenu=menu;more.ToolTip="更多操作（也可右键任务卡片）";more.FontSize=20;more.Padding=new Thickness(5,0,5,0);more.MinHeight=24;more.Margin=new Thickness(4,-3,-4,0);more.Click+=(_,_)=>{menu.PlacementTarget=more;menu.IsOpen=true;};DockPanel.SetDock(more,Dock.Right);top.Children.Add(more);
+        var chips=Ui.Row();if(batchMode){var check=Ui.Check("",selected.Contains(id));System.Windows.Automation.AutomationProperties.SetName(check,"选择任务："+task.S("title"));check.Checked+=(_,_)=>{selected.Add(id);selectionText.Text=$"已选择 {selected.Count} 项   ";};check.Unchecked+=(_,_)=>{selected.Remove(id);selectionText.Text=$"已选择 {selected.Count} 项   ";};chips.Children.Add(check);}
+        chips.Children.Add(Ui.Chip(Priorities[p],Ui.Color(new[]{"#C66976","#C28C37","#8C92A7","#6C9B92"}[p]),Ui.Color(new[]{"#FBECEF","#FCF3E4","#F2F3F7","#ECF5F2"}[p])));
+        foreach(var t in task.A("tags").Take(2)){var ink=TagBrush(t.S("color"));var bg=ink.Clone();bg.Opacity=.10;chips.Children.Add(Ui.Chip(t.S("name"),ink,bg));}if(task.A("tags").Count>2)chips.Children.Add(Ui.Chip("+"+(task.A("tags").Count-2),Ui.Muted));top.Children.Add(chips);content.Children.Add(top);
+        var title=Ui.Quiet(task.S("title"),()=>Edit(task),"task-"+id);var titleText=Ui.Text(task.S("title"),15);titleText.FontWeight=FontWeights.SemiBold;titleText.Margin=new Thickness(0);title.Content=titleText;title.HorizontalContentAlignment=HorizontalAlignment.Stretch;title.Padding=new Thickness(0,8,0,4);title.Margin=new Thickness(0,2,0,0);title.MinHeight=0;content.Children.Add(title);
+        var note=task.S("note");if(note.Length>0){var preview=Ui.Text(note.Replace("\r","").Replace("\n"," "),12,Ui.Muted);preview.MaxHeight=36;preview.LineHeight=18;preview.TextTrimming=TextTrimming.CharacterEllipsis;preview.Margin=new Thickness(0,3,0,8);content.Children.Add(preview);}
+        if(task.A("blocked").Count>0)content.Children.Add(Ui.Text("等待："+string.Join("、",task.A("blocked").Select(d=>d.S("title"))),11,Ui.Color("#BE914E")));
+        var metadata=Ui.Row();string date=task.S("due_date");bool overdue=date!=""&&date.CompareTo(DateTime.Today.ToString("yyyy-MM-dd"))<0&&task.S("status")!="完成";
+        var dueLabel=Ui.Text(date!=""?"◷  "+Ui.Due(date):"未设截止日期",11,overdue?Ui.Color("#C66976"):Ui.Muted);dueLabel.ToolTip=date;dueLabel.Margin=new Thickness(0,4,14,4);metadata.Children.Add(dueLabel);
+        if(task.A("checklist").Count>0)metadata.Children.Add(Ui.Text($"☑ {task.A("checklist").Count(c=>c.B("done"))}/{task.A("checklist").Count}   ",11,Ui.Muted));
+        if(task.A("files").Count>0)metadata.Children.Add(Ui.Text($"附件 {task.A("files").Count}   ",11,Ui.Muted));
+        if(task["options"].S("today")==DateTime.Today.ToString("yyyy-MM-dd"))metadata.Children.Add(Ui.Text("今日  ",11,Ui.Purple));
+        if(task["options"].S("repeat","off")!="off")metadata.Children.Add(Ui.Text("↻ 重复",11,Ui.Purple));
+        content.Children.Add(new Border{BorderBrush=Ui.Color("#EEF0F5"),BorderThickness=new Thickness(0,1,0,0),Margin=new Thickness(0,10,0,0),Padding=new Thickness(0,7,0,0),Child=metadata});
+        var card=Ui.Card(content);card.Padding=new Thickness(14,12,14,10);card.ContextMenu=menu;card.MouseEnter+=(_,_)=>card.BorderBrush=Ui.Color("#C5BEF7");card.MouseLeave+=(_,_)=>card.BorderBrush=Ui.Color("#E5E8F1");
         card.AllowDrop=page is "看板" or "我的今天";
         card.Drop+=async(_,e)=>{if(e.Data.GetData("TaskBoard.Task") is int source){e.Handled=true;if(source==id)return;try{var lane=State.A("tasks").Where(t=>t.S("status")==task.S("status")&&t.I("id")!=source).OrderBy(t=>t.I("sort_order")).ToList();int index=lane.FindIndex(t=>t.I("id")==id);Accept(await rpc.Call("action",J.Obj(("id",source),("action","move"),("status",task.S("status")),("index",Math.Max(0,index)))));}catch(Exception ex){Ui.Error(ex.Message);}}};
-        Point start=default;card.PreviewMouseLeftButtonDown+=(_,e)=>start=e.GetPosition(card);
-        card.MouseMove+=(_,e)=>{if(e.LeftButton==MouseButtonState.Pressed&&(e.GetPosition(card)-start).Length>12&&page is "看板" or "我的今天")DragDrop.DoDragDrop(card,new DataObject("TaskBoard.Task",id),DragDropEffects.Move);};return card;
+        Point start=default;bool canDrag=false;card.PreviewMouseLeftButtonDown+=(_,e)=>{start=e.GetPosition(card);canDrag=true;var node=e.OriginalSource as DependencyObject;while(node is not null&&node!=card){if(node is System.Windows.Controls.Primitives.ButtonBase){canDrag=false;break;}node=VisualTreeHelper.GetParent(node);}};
+        card.MouseMove+=(_,e)=>{if(canDrag&&e.LeftButton==MouseButtonState.Pressed&&(e.GetPosition(card)-start).Length>12&&page is "看板" or "我的今天"){canDrag=false;DragDrop.DoDragDrop(card,new DataObject("TaskBoard.Task",id),DragDropEffects.Move);}};return card;
     }
+    async Task RunAction(int id,string action)=>Accept(await rpc.Call("action",J.Obj(("id",id),("action",action))));
     Button ActionButton(string label,int id,string action)=>Ui.Button(label,async()=>Accept(await rpc.Call("action",J.Obj(("id",id),("action",action)))));
     internal static JsonObject Payload(JsonObject task)
     {
         var p=task.Copy();p["due"]=task["due_date"]?.DeepClone();p["tags"]=new JsonArray(task.A("tags").Select(t=>(JsonNode?)JsonValue.Create(t.I("id"))).ToArray());p["dependencies"]=new JsonArray(task.A("dependencies").Select(t=>(JsonNode?)JsonValue.Create(t.I("id"))).ToArray());return p;
     }
-    internal Task Edit(JsonObject? task){var editor=new TaskEditor(this,task);editor.ShowDialog();return Task.CompletedTask;}
+    internal Task Edit(JsonObject? task){var editor=task is not null&&task.I("id")==0?new TaskEditor(this,null,task):new TaskEditor(this,task);editor.ShowDialog();return Task.CompletedTask;}
     internal static Brush TagBrush(string key)=>key switch {"red"=>Brushes.IndianRed,"blue"=>Brushes.SteelBlue,"green"=>Brushes.SeaGreen,"orange"=>Brushes.DarkOrange,"gray"=>Brushes.SlateGray,_=>Ui.Purple};
     async Task PollReminders()
     {

@@ -13,7 +13,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 25
     permissions:
-      contents: read
+      contents: write
       id-token: write
     env:
       PYTHONUTF8: '1'
@@ -88,13 +88,13 @@ jobs:
         shell: pwsh
         run: |
           if ($env:SIGNING_ENABLED -eq 'true') {
-            ./scripts/verify-signatures.ps1 -Paths dist/Setup_TaskBoard_3.0.0.exe
+            ./scripts/verify-signatures.ps1 -Paths dist/Setup_TaskBoard_3.0.1.exe
             'SIGNED: verified Authenticode chain and RFC3161 timestamp.' | Set-Content dist/SIGNING-STATUS.txt
           } else {
             'UNSIGNED: no trusted signing identity configured. Publisher metadata wrky02 does not imply a verified signer.' | Set-Content dist/SIGNING-STATUS.txt
             Write-Output '::notice title=Code signing::Unsigned build: no trusted signing identity configured. See docs/CODE-SIGNING.md.'
           }
-          (Get-FileHash dist/Setup_TaskBoard_3.0.0.exe -Algorithm SHA256).Hash.ToLower() + '  Setup_TaskBoard_3.0.0.exe' | Set-Content dist/SHA256SUMS.txt
+          (Get-FileHash dist/Setup_TaskBoard_3.0.1.exe -Algorithm SHA256).Hash.ToLower() + '  Setup_TaskBoard_3.0.1.exe' | Set-Content dist/SHA256SUMS.txt
       - name: Install and exercise actual native controls
         shell: pwsh
         run: |
@@ -103,9 +103,9 @@ jobs:
             python -m pip install pywinauto==0.6.9 psutil==7.1.0 Pillow==11.3.0
             if ($LASTEXITCODE -ne 0) { throw 'UI automation dependencies failed' }
             $install=Join-Path $env:RUNNER_TEMP 'TaskBoard-native-install'
-            $p=Start-Process dist/Setup_TaskBoard_3.0.0.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
+            $p=Start-Process dist/Setup_TaskBoard_3.0.1.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
             if ($p.ExitCode -ne 0) { throw 'Native installation failed' }
-            $company=(Get-Item dist/Setup_TaskBoard_3.0.0.exe).VersionInfo.CompanyName
+            $company=(Get-Item dist/Setup_TaskBoard_3.0.1.exe).VersionInfo.CompanyName
             if ($company.Trim() -ne 'wrky02') { throw 'Incorrect publisher metadata' }
             $entry=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{A71D03F1-966D-49D2-A264-39F7BD20E097}_is1'
             if (([string]$entry.Publisher).Trim() -ne 'wrky02') { throw 'Incorrect installed publisher' }
@@ -130,6 +130,22 @@ jobs:
             Write-Output ('::error title=Native install::'+$_.Exception.Message.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A'))
             throw
           }
+      - name: Capture Windows UI with synthetic demo data
+        shell: pwsh
+        run: |
+          $install=Join-Path $env:RUNNER_TEMP 'TaskBoard-visual-install'
+          $p=Start-Process dist/Setup_TaskBoard_3.0.1.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Visual review installation failed' }
+          python scripts/capture-native.py "$install/TaskBoard.exe" "$install/PreviewData" *> artifacts/native-visual.log
+          if ($LASTEXITCODE -ne 0) {
+            python scripts/report-ci.py artifacts/native-visual.log 'Native visual review'
+            throw 'Native visual review failed'
+          }
+          Get-Content artifacts/native-visual.log
+      - name: Publish synthetic screenshots for visual review
+        if: github.ref == 'refs/heads/build/native-windows'
+        shell: pwsh
+        run: ./scripts/publish-ui-preview.ps1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -137,8 +153,8 @@ jobs:
           path: artifacts/
       - uses: actions/upload-artifact@v4
         with:
-          name: TaskBoard-Native-Windows-3.0.0
+          name: TaskBoard-Native-Windows-3.0.1
           path: |
-            dist/Setup_TaskBoard_3.0.0.exe
+            dist/Setup_TaskBoard_3.0.1.exe
             dist/SHA256SUMS.txt
             dist/SIGNING-STATUS.txt

@@ -41,8 +41,8 @@ internal sealed class TaskEditor : Window
         var value=restored??original;
         draftKey=key??(task is null?"native-new-"+Guid.NewGuid().ToString("N"):"native-task-"+task.I("id"));
         readOnly=task is not null&&(task.S("archived_at")!=""||task.S("deleted_at")!="");
-        title=Ui.Input(value.S("title"),"editorTitle");title.FontSize=21;
-        note=Ui.Input(value.S("note"),"editorNote");note.AcceptsReturn=true;note.TextWrapping=TextWrapping.Wrap;note.MinHeight=140;note.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;
+        title=Ui.Input(value.S("title"),"editorTitle");title.FontSize=22;title.FontWeight=FontWeights.SemiBold;Ui.Hint(title,"为任务起一个清晰的标题…");
+        note=Ui.Input(value.S("note"),"editorNote");note.AcceptsReturn=true;note.TextWrapping=TextWrapping.Wrap;note.MinHeight=100;Ui.Hint(note,"补充任务背景、目标和需要注意的细节…");note.VerticalContentAlignment=VerticalAlignment.Top;note.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;
         status=Ui.Combo(BoardWindow.Stages,Math.Max(0,Array.IndexOf(BoardWindow.Stages,value.S("status","计划中"))),"editorStatus");
         priority=Ui.Combo(BoardWindow.Priorities,value["options"].I("priority",2),"editorPriority");
         due=new DatePicker{Width=165,MinHeight=34,SelectedDate=DateTime.TryParse(value.S("due"),out var d)?d:null,Margin=new Thickness(0,4,8,4),SelectedDateFormat=DatePickerFormat.Short};System.Windows.Automation.AutomationProperties.SetAutomationId(due,"editorDue");
@@ -51,26 +51,30 @@ internal sealed class TaskEditor : Window
         basis=Ui.Combo(new[]{"按固定截止日期","按完成日期"},value["options"].S("repeat_basis")=="completion"?1:0);
         reminder=Ui.Combo(new[]{"不提醒","当天提醒","提前一天"},Array.IndexOf(new[]{"off","today","before"},value["options"].S("reminder","off")));
         reminderTime=Ui.Input(value["options"].S("reminder_time","09:00"));reminderTime.Width=80;
-        var top=Ui.Column(title,Ui.Row(Ui.Text("状态"),status,Ui.Text("优先级"),priority,Ui.Text("截止日期"),due),Ui.Row(Ui.Button("今天",()=>due.SelectedDate=DateTime.Today),Ui.Button("明天",()=>due.SelectedDate=DateTime.Today.AddDays(1)),Ui.Button("一周后",()=>due.SelectedDate=DateTime.Today.AddDays(7)),Ui.Button("清除日期",()=>due.SelectedDate=null)),today);
+        var fields=new Grid{Margin=new Thickness(0,6,0,4)};for(int i=0;i<3;i++)fields.ColumnDefinitions.Add(new ColumnDefinition());
+        UIElement[] fieldControls={status,priority,due};string[] labels={"任务状态","优先级","截止日期"};due.Width=double.NaN;
+        for(int i=0;i<3;i++){var field=Ui.Column(Ui.Text(labels[i],11,Ui.Muted),fieldControls[i]);Grid.SetColumn(field,i);fields.Children.Add(field);}
+        var shortcuts=Ui.Row();foreach(var (label,days) in new[]{("今天",0),("明天",1),("一周后",7)}){var button=Ui.Quiet(label,()=>{due.SelectedDate=DateTime.Today.AddDays(days);return Task.CompletedTask;});button.MinHeight=28;button.Padding=new Thickness(10,3,10,3);button.Foreground=Ui.Purple;shortcuts.Children.Add(button);}var clear=Ui.Quiet("清除日期",()=>{due.SelectedDate=null;return Task.CompletedTask;});clear.MinHeight=28;clear.Padding=new Thickness(10,3,10,3);shortcuts.Children.Add(clear);
+        var top=Ui.Column(Ui.Row(Ui.Chip(task is null?"NEW TASK":"TASK / "+task.I("id"),Ui.Purple),Ui.Text(task is null?"记录新的想法与安排":"任务详情",12,Ui.Muted)),title,fields,shortcuts,today);top.Margin=new Thickness(0,0,0,14);
         var tagPanel=Ui.Row();var tagIds=value.A("tags").Select(x=>x is JsonObject?x.I("id"):int.Parse(x!.ToString())).ToHashSet();
         foreach(var t in owner.State.A("tags")){int id=t.I("id");var check=Ui.Check(t.S("name"),tagIds.Contains(id));tags.Add((check,id));tagPanel.Children.Add(check);}
         var depPanel=new StackPanel();var depIds=value.A("dependencies").Select(x=>x is JsonObject?x.I("id"):int.Parse(x!.ToString())).ToHashSet();
-        var depSearch=Ui.Input();depSearch.ToolTip="搜索依赖任务";depPanel.Children.Add(depSearch);
+        var depSearch=Ui.Input();Ui.Hint(depSearch,"搜索可关联的任务…");depPanel.Children.Add(depSearch);
         var depList=new StackPanel();foreach(var t in owner.State.A("tasks").Concat(owner.State.A("archived")).Concat(owner.State.A("trash").Where(x=>depIds.Contains(x.I("id"))))){int id=t.I("id");if(id==task.I("id"))continue;var check=Ui.Check($"#{id}  {t.S("title")}  · {t.S("status")}",depIds.Contains(id));dependencies.Add((check,id));depList.Children.Add(check);}
         depSearch.TextChanged+=(_,_)=>{foreach(var (check,_) in dependencies)check.Visibility=check.Content.ToString()!.Contains(depSearch.Text,StringComparison.OrdinalIgnoreCase)?Visibility.Visible:Visibility.Collapsed;};depPanel.Children.Add(new ScrollViewer{Content=depList,MaxHeight=200,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
-        checkInput=Ui.Input("","checkInput");checkInput.Width=360;var addCheck=Ui.Button("添加检查项",()=>{AddCheck(checkInput.Text,false);checkInput.Clear();},"addCheck");checkInput.KeyDown+=(_,e)=>{if(e.Key==Key.Enter){AddCheck(checkInput.Text,false);checkInput.Clear();e.Handled=true;}};
+        checkInput=Ui.Input("","checkInput");checkInput.Width=330;Ui.Hint(checkInput,"添加检查项，按 Enter 确认…");var addCheck=Ui.Button("添加检查项",()=>{AddCheck(checkInput.Text,false);checkInput.Clear();},"addCheck");checkInput.KeyDown+=(_,e)=>{if(e.Key==Key.Enter){AddCheck(checkInput.Text,false);checkInput.Clear();e.Handled=true;}};
         foreach(var c in value.A("checklist"))AddCheck(c.S("label"),c.B("done"));
-        milestoneInput=Ui.Input();milestoneInput.Width=360;foreach(var m in value.A("milestones"))AddMilestone(m.S("name"),m.B("confirmed"),m.I("id"));
-        fileSearch=Ui.Input();fileSearch.ToolTip="按附件名称搜索";fileSearch.TextChanged+=(_,_)=>RenderFiles();
+        milestoneInput=Ui.Input();milestoneInput.Width=330;Ui.Hint(milestoneInput,"添加阶段目标…");foreach(var m in value.A("milestones"))AddMilestone(m.S("name"),m.B("confirmed"),m.I("id"));
+        fileSearch=Ui.Input();Ui.Hint(fileSearch,"按名称搜索附件…");fileSearch.TextChanged+=(_,_)=>RenderFiles();
         foreach(var f in task.A("files"))existingFiles.Add(f!.Copy());
         foreach(var v in value.A("file_versions")){var f=existingFiles.FirstOrDefault(f=>f.I("id")==v.I("id"));if(f is not null){f["version_label"]=v.S("version_label");f["version_note"]=v.S("version_note");}}
         foreach(var f in value.A("new_files"))newFiles.Add(f!.Copy());foreach(var id in value.A("removed_files"))removed.Add(int.Parse(id!.ToString()));
         var attachmentActions=Ui.Row(Ui.Button("选择附件",async()=>{var dialog=new OpenFileDialog{Multiselect=true,Title="选择附件"};if(dialog.ShowDialog(this)==true)await AddFiles(dialog.FileNames);},"addFiles"),Ui.Button("粘贴截图",PasteImage),Ui.Text("拖入文件或 Ctrl+V · 单次 100 MB",12,Ui.Muted));
         var fileArea=Ui.Column(attachmentActions,progress,fileSearch,filesPanel);fileArea.AllowDrop=true;fileArea.Drop+=async(_,e)=>{if(e.Data.GetData(DataFormats.FileDrop) is string[] paths){try{await AddFiles(paths);}catch(Exception ex){Ui.Error(ex.Message);}}};RenderFiles();
-        var details=Ui.Column(Ui.Section("任务说明",note),Ui.Section("标签",tagPanel),Ui.Section("检查清单",Ui.Column(checksPanel,Ui.Row(checkInput,addCheck))),Ui.Section("里程碑",Ui.Column(milestonesPanel,Ui.Row(milestoneInput,Ui.Button("添加里程碑",()=>{AddMilestone(milestoneInput.Text,false,0);milestoneInput.Clear();}))),false),Ui.Section("重复与提醒",Ui.Column(Ui.Row(repeat,basis),Ui.Text("完成当前任务后自动生成下一项；固定日期模式跳过已错过的周期。",12,Ui.Muted),Ui.Row(reminder,reminderTime),Ui.Text("程序在托盘运行时可提醒；完全退出或锁定工作区后无法提醒。",12,Ui.Muted))),Ui.Section("任务依赖",depPanel,false),Ui.Section("附件",fileArea),Ui.Section("操作记录",History(task.I("id")),false));
+        var details=Ui.Column(Ui.Section("任务说明",note),Ui.Section("标签",tagPanel),Ui.Section("检查清单",Ui.Column(checksPanel,Ui.Row(checkInput,addCheck))),Ui.Section("里程碑",Ui.Column(milestonesPanel,Ui.Row(milestoneInput,Ui.Button("添加里程碑",()=>{AddMilestone(milestoneInput.Text,false,0);milestoneInput.Clear();}))),false),Ui.Section("重复与提醒",Ui.Column(Ui.Row(repeat,basis),Ui.Text("完成当前任务后自动生成下一项；固定日期模式跳过已错过的周期。",12,Ui.Muted),Ui.Row(reminder,reminderTime),Ui.Text("程序在托盘运行时可提醒；完全退出或锁定工作区后无法提醒。",12,Ui.Muted)),false),Ui.Section("任务依赖",depPanel,false),Ui.Section("附件",fileArea),Ui.Section("操作记录",History(task.I("id")),false));
         var save=Ui.Button("保存任务",Save,"saveTask",true);
         var bottom=Ui.Column(saveState,Ui.Row(save,Ui.Button("关闭（保留草稿）",()=>Close(),"closeEditor"),Ui.Button("放弃草稿",async()=>{if(Ui.Confirm("放弃尚未正式保存的修改？")){await owner.rpc.Call("draft-save",J.Obj(("key",draftKey),("action","delete")));finished=true;Close();}})));
-        var root=new DockPanel{Margin=new Thickness(22)};DockPanel.SetDock(top,Dock.Top);root.Children.Add(top);DockPanel.SetDock(bottom,Dock.Bottom);root.Children.Add(bottom);root.Children.Add(Ui.Scroll(details));Content=root;
+        bottom.Margin=new Thickness(0,12,0,0);var root=new DockPanel{Margin=new Thickness(26,20,26,18)};DockPanel.SetDock(top,Dock.Top);root.Children.Add(top);DockPanel.SetDock(bottom,Dock.Bottom);root.Children.Add(bottom);root.Children.Add(Ui.Scroll(details));Content=root;
         if(readOnly){top.IsEnabled=false;details.IsEnabled=false;save.IsEnabled=false;saveState.Text="已归档或回收站任务为只读，请先恢复再编辑。";}
         PreviewKeyDown+=async(_,e)=>{if(e.Key==Key.V&&Keyboard.Modifiers.HasFlag(ModifierKeys.Control)&&Clipboard.ContainsImage()){e.Handled=true;try{await PasteImage();}catch(Exception ex){Ui.Error(ex.Message);}}};
         loading=false;initial=Collect().ToJsonString();lastDraft=restored is null?initial:"";
