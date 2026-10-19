@@ -66,12 +66,26 @@
   <Setter Property="Width" Value="8"/><Setter Property="Background" Value="Transparent"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Grid Background="Transparent"><Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="Vertical"><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#CFD3E2" CornerRadius="3" Margin="2,0"/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton><Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter>
  </Style>
+ <Style x:Key="ThinScrollViewer" TargetType="ScrollViewer">
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollViewer"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+   <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" CanContentScroll="{TemplateBinding CanContentScroll}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Margin="{TemplateBinding Padding}"/>
+   <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="1" Width="8" Margin="3,0,0,0" Orientation="Vertical" Minimum="0" Maximum="{TemplateBinding ScrollableHeight}" ViewportSize="{TemplateBinding ViewportHeight}" Value="{Binding VerticalOffset,RelativeSource={RelativeSource TemplatedParent},Mode=OneWay}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" Style="{StaticResource {x:Type ScrollBar}}"/>
+  </Grid></ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style TargetType="ContextMenu">
+  <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#E2E6F0"/><Setter Property="MinWidth" Value="170"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="9" Padding="5"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/></Border></ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style TargetType="MenuItem">
+  <Setter Property="Foreground" Value="#46516A"/><Setter Property="FontSize" Value="12"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem"><Border x:Name="chrome" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}"><ContentPresenter ContentSource="Header"/></Border><ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="chrome" Property="Background" Value="#F0EEFF"/><Setter Property="Foreground" Value="#7063ED"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style TargetType="Expander">
   <Setter Property="Background" Value="White"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander">
    <Border Background="{TemplateBinding Background}" CornerRadius="10" BorderBrush="#E7EAF2" BorderThickness="1" Padding="16,10"><DockPanel>
     <ToggleButton DockPanel.Dock="Top" IsChecked="{Binding IsExpanded,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="0,4" Foreground="#35405A" FontWeight="SemiBold">
-     <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Grid Background="Transparent"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/></Grid.ColumnDefinitions><ContentPresenter/><TextBlock x:Name="arrow" Grid.Column="1" Text="⌄" Foreground="#929BB0" HorizontalAlignment="Right"/></Grid></ControlTemplate></ToggleButton.Template>
+     <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Grid Background="Transparent"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/></Grid.ColumnDefinitions><ContentPresenter/><TextBlock x:Name="arrow" Grid.Column="1" Text="⌄" Foreground="#929BB0" HorizontalAlignment="Right"/></Grid><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="False"><Setter TargetName="arrow" Property="Text" Value="›"/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
      <ContentPresenter Content="{TemplateBinding Header}"/>
     </ToggleButton>
     <ContentPresenter x:Name="content" Content="{TemplateBinding Content}" Margin="0,12,0,4"/>
@@ -79,8 +93,37 @@
    <ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="False"><Setter TargetName="content" Property="Visibility" Value="Collapsed"/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
+ <Style x:Key="CalendarDay" TargetType="CalendarDayButton">
+  <Setter Property="Foreground" Value="#35405A"/><Setter Property="FontSize" Value="12"/><Setter Property="MinWidth" Value="30"/><Setter Property="MinHeight" Value="29"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CalendarDayButton"><Border x:Name="chrome" CornerRadius="6" Background="Transparent" Margin="1" BorderBrush="Transparent" BorderThickness="1"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers>
+   <Trigger Property="IsInactive" Value="True"><Setter Property="Foreground" Value="#BBC0CE"/></Trigger>
+   <Trigger Property="IsToday" Value="True"><Setter TargetName="chrome" Property="BorderBrush" Value="#ACA1F6"/><Setter Property="Foreground" Value="#7063ED"/></Trigger>
+   <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="chrome" Property="Background" Value="#F0EEFF"/></Trigger>
+   <Trigger Property="IsSelected" Value="True"><Setter TargetName="chrome" Property="Background" Value="#7063ED"/><Setter Property="Foreground" Value="White"/></Trigger>
+   <Trigger Property="IsBlackedOut" Value="True"><Setter Property="Opacity" Value="0.35"/></Trigger>
+  </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="TaskCalendar" TargetType="Calendar">
+  <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#DED9F6"/><Setter Property="Padding" Value="10"/><Setter Property="FontFamily" Value="pack://application:,,,/fonts/#Noto Sans CJK SC"/>
+  <Setter Property="CalendarDayButtonStyle" Value="{StaticResource CalendarDay}"/>
+  <Setter Property="CalendarItemStyle"><Setter.Value><Style TargetType="CalendarItem"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CalendarItem">
+   <Border x:Name="PART_Root" Background="White" CornerRadius="10" BorderBrush="#E2DCF6" BorderThickness="1" Padding="12"><Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition/><ColumnDefinition Width="32"/></Grid.ColumnDefinitions>
+     <Button x:Name="PART_PreviousButton" Content="‹" FontSize="20" BorderThickness="0" Background="Transparent" Padding="5"/>
+     <Button x:Name="PART_HeaderButton" Grid.Column="1" FontWeight="SemiBold" BorderThickness="0" Background="Transparent" Padding="6"/>
+     <Button x:Name="PART_NextButton" Grid.Column="2" Content="›" FontSize="20" BorderThickness="0" Background="Transparent" Padding="5"/>
+    </Grid>
+    <Grid x:Name="PART_MonthView" Grid.Row="1" Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions></Grid>
+    <Grid x:Name="PART_YearView" Grid.Row="1" Visibility="Hidden"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions></Grid>
+    <Grid x:Name="PART_DisabledVisual" Grid.RowSpan="2" IsHitTestVisible="False" Opacity="0"/>
+   </Grid></Border>
+   <ControlTemplate.Triggers><DataTrigger Binding="{Binding DisplayMode,RelativeSource={RelativeSource AncestorType=Calendar}}" Value="Year"><Setter TargetName="PART_MonthView" Property="Visibility" Value="Hidden"/><Setter TargetName="PART_YearView" Property="Visibility" Value="Visible"/></DataTrigger><DataTrigger Binding="{Binding DisplayMode,RelativeSource={RelativeSource AncestorType=Calendar}}" Value="Decade"><Setter TargetName="PART_MonthView" Property="Visibility" Value="Hidden"/><Setter TargetName="PART_YearView" Property="Visibility" Value="Visible"/></DataTrigger></ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter></Style></Setter.Value></Setter>
+ </Style>
  <Style TargetType="DatePicker">
   <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#E2E6F0"/><Setter Property="MinHeight" Value="38"/>
+  <Setter Property="CalendarStyle" Value="{StaticResource TaskCalendar}"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="DatePicker">
    <Grid x:Name="PART_Root"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8"/>
     <Grid Margin="7,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions>
@@ -90,17 +133,6 @@
     <Popup x:Name="PART_Popup" StaysOpen="False" AllowsTransparency="True" Placement="Bottom"/>
    </Grid>
   </ControlTemplate></Setter.Value></Setter>
- </Style>
- <Style TargetType="Calendar"><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#DED9F6"/><Setter Property="Padding" Value="8"/></Style>
- <Style TargetType="CalendarDayButton">
-  <Setter Property="Foreground" Value="#35405A"/><Setter Property="FontSize" Value="12"/><Setter Property="MinWidth" Value="30"/><Setter Property="MinHeight" Value="29"/>
-  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CalendarDayButton"><Border x:Name="chrome" CornerRadius="6" Background="Transparent" Margin="1" BorderBrush="Transparent" BorderThickness="1"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers>
-   <Trigger Property="IsInactive" Value="True"><Setter Property="Foreground" Value="#BBC0CE"/></Trigger>
-   <Trigger Property="IsToday" Value="True"><Setter TargetName="chrome" Property="BorderBrush" Value="#ACA1F6"/><Setter Property="Foreground" Value="#7063ED"/></Trigger>
-   <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="chrome" Property="Background" Value="#F0EEFF"/></Trigger>
-   <Trigger Property="IsSelected" Value="True"><Setter TargetName="chrome" Property="Background" Value="#7063ED"/><Setter Property="Foreground" Value="White"/></Trigger>
-   <Trigger Property="IsBlackedOut" Value="True"><Setter Property="Opacity" Value="0.35"/></Trigger>
-  </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType="ToolTip"><Setter Property="MaxWidth" Value="400"/><Setter Property="Padding" Value="10,6"/><Setter Property="Background" Value="#273249"/><Setter Property="Foreground" Value="White"/></Style>
 </ResourceDictionary>

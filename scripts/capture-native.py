@@ -13,6 +13,9 @@ import win32con
 import win32gui
 import psutil
 from pywinauto import Desktop
+import ctypes
+from ctypes import wintypes
+from PIL import ImageGrab
 
 exe = Path(sys.argv[1]).resolve()
 root = Path(sys.argv[2]).resolve()
@@ -81,8 +84,12 @@ def dialog(title):
     w=Desktop(backend='win32').window(process=process.pid,title=title);w.wait('visible',timeout=30)
     return Desktop(backend='uia').window(handle=w.handle)
 def capture(win,name):
+    rect=win.rectangle();win32api.SetCursorPos((rect.left+rect.width()//2,rect.top+15))
     time.sleep(1)
-    win.wrapper_object().capture_as_image().save(out/(name+'.png'))
+    bounds=wintypes.RECT()
+    result=ctypes.windll.dwmapi.DwmGetWindowAttribute(win.handle,9,ctypes.byref(bounds),ctypes.sizeof(bounds))
+    if result==0:ImageGrab.grab(bbox=(bounds.left,bounds.top,bounds.right,bounds.bottom)).save(out/(name+'.png'))
+    else:win.wrapper_object().capture_as_image().save(out/(name+'.png'))
 
 try:
     win=Desktop(backend='uia').window(process=process.pid,title_re='任务看板系统.*',control_type='Window');win.wait('visible',timeout=45)
@@ -95,7 +102,13 @@ try:
     today=until(lambda:next((x for w in Desktop(backend='uia').windows(process=process.pid) for x in w.descendants(control_type='MenuItem') if x.window_text()=='移出今日计划'),None))
     capture(win,'task-menu');today.invoke();control(win,'task-1')
     control(win,'task-1').invoke();edit=dialog('编辑任务');capture(edit,'task-editor')
-    control(edit,'editorDue');edit.child_window(auto_id='PART_Button',control_type='Button').invoke();capture(edit,'date-picker')
+    control(edit,'editorDue');edit.child_window(auto_id='PART_Button',control_type='Button').invoke()
+    def popup_control(id):
+        return until(lambda:next((c for w in Desktop(backend='uia').windows(process=process.pid) for c in w.descendants() if c.element_info.automation_id==id),None))
+    header=popup_control('PART_HeaderButton');month=header.window_text()
+    popup_control('PART_NextButton').invoke();until(lambda:popup_control('PART_HeaderButton').window_text()!=month)
+    popup_control('PART_PreviousButton').invoke();until(lambda:popup_control('PART_HeaderButton').window_text()==month)
+    capture(edit,'date-picker')
     # Close popup without changing selected date.
     edit.type_keys('{ESC}')
     edit_handle=edit.handle;control(edit,'closeEditor').invoke();until(lambda:not win32gui.IsWindow(edit_handle))

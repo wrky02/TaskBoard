@@ -42,8 +42,8 @@ internal sealed partial class BoardWindow : Window
     internal static readonly string[] Priorities={"紧急","高","普通","低"};
     public BoardWindow(Rpc engine)
     {
-        rpc=engine;Title="任务看板系统 · 3.0";Width=Math.Min(1360,SystemParameters.WorkArea.Width-24);Height=Math.Min(900,SystemParameters.WorkArea.Height-24);MinWidth=Math.Min(900,Width);MinHeight=Math.Min(600,Height);
-        WindowStartupLocation=WindowStartupLocation.CenterScreen;Background=Ui.Surface;FontFamily=new FontFamily("Microsoft YaHei UI");FontSize=14;
+        rpc=engine;Title="任务看板系统 · 3.0.1";Width=Math.Min(1360,SystemParameters.WorkArea.Width-24);Height=Math.Min(900,SystemParameters.WorkArea.Height-24);MinWidth=Math.Min(900,Width);MinHeight=Math.Min(600,Height);
+        WindowStartupLocation=WindowStartupLocation.CenterScreen;Background=Ui.Surface;FontFamily=Ui.Font;FontSize=14;
         Icon=BitmapFrame.Create(new Uri("pack://application:,,,/taskboard.ico"));
         tray=new Forms.NotifyIcon{Icon=new System.Drawing.Icon(Application.GetResourceStream(new Uri("pack://application:,,,/taskboard.ico")).Stream),Text="任务看板系统",Visible=true};
         var menu=new Forms.ContextMenuStrip();menu.Items.Add("打开任务看板",null,(_,_)=>Dispatcher.Invoke(Reopen));
@@ -76,7 +76,7 @@ internal sealed partial class BoardWindow : Window
             var confirm=new PasswordBox{MinHeight=38,Padding=new Thickness(8),Margin=new Thickness(0,8,0,8)};
             System.Windows.Automation.AutomationProperties.SetAutomationId(password,"loginPassword");System.Windows.Automation.AutomationProperties.SetAutomationId(confirm,"loginConfirm");
             var message=Ui.Text("");
-            var panel=Ui.Column(Ui.Text("T·",48,Ui.Purple),Ui.Text(first?"创建本地工作区":"欢迎回来",28),Ui.Text(first?"设置至少 8 位密码，保护工作区入口。":"输入密码，继续处理你的任务。",14,Ui.Muted),password);
+            var panel=Ui.Column(Ui.Logo(54),Ui.Text(first?"创建本地工作区":"欢迎回来",28),Ui.Text(first?"设置至少 8 位密码，保护工作区入口。":"输入密码，继续处理你的任务。",14,Ui.Muted),password);
             if(first)panel.Children.Add(confirm);
             panel.Children.Add(Ui.Button(first?"创建工作区":"解锁工作区",async()=>{
                 try{State=await rpc.Call("login",J.Obj(("password",password.Password),("confirm",confirm.Password)));Unlocked=true;BuildShell();await RefreshDraftNotice();await PollReminders();}catch(Exception ex){message.Text=ex.Message;}
@@ -185,7 +185,7 @@ internal sealed partial class BoardWindow : Window
     Border TaskCard(JsonObject task)
     {
         int id=task.I("id"),p=Math.Clamp(task["options"].I("priority",2),0,3);var content=new StackPanel();
-        var top=new DockPanel();var menu=new ContextMenu();
+        var top=new DockPanel();var menu=new ContextMenu{FontFamily=Ui.Font};
         void Menu(string label,Func<Task> action){var item=new MenuItem{Header=label,Padding=new Thickness(10,7,16,7)};item.Click+=async(_,_)=>{try{await action();}catch(Exception ex){Ui.Error(ex.Message);}};menu.Items.Add(item);}
         Task Act(string action)=>RunAction(id,action);
         Menu("打开任务",()=>Edit(task));
@@ -196,7 +196,7 @@ internal sealed partial class BoardWindow : Window
             if(task.S("status")=="完成")Menu("归档任务",()=>Act("archive"));else Menu("标记为完成",async()=>Accept(await rpc.Call("action",J.Obj(("id",id),("action","move"),("status","完成")))));
             Menu("复制任务",()=>Act("duplicate"));menu.Items.Add(new Separator());Menu("移至回收站",()=>Act("trash"));
         }
-        var more=Ui.Quiet("⋯",()=>Task.CompletedTask,"more-"+id);more.ContextMenu=menu;more.ToolTip="更多操作（也可右键任务卡片）";more.FontSize=20;more.Padding=new Thickness(5,0,5,0);more.MinHeight=24;more.Margin=new Thickness(4,-3,-4,0);more.Click+=(_,_)=>{menu.PlacementTarget=more;menu.IsOpen=true;};DockPanel.SetDock(more,Dock.Right);top.Children.Add(more);
+        var more=Ui.Quiet("⋯",()=>Task.CompletedTask,"more-"+id);more.ContextMenu=menu;more.ToolTip="更多操作（也可右键任务卡片）";more.FontSize=20;more.Padding=new Thickness(5,0,5,0);more.MinHeight=24;more.Margin=new Thickness(4,-3,-4,0);more.Click+=(_,_)=>{menu.PlacementTarget=more;menu.Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom;menu.IsOpen=true;};DockPanel.SetDock(more,Dock.Right);top.Children.Add(more);
         var chips=Ui.Row();if(batchMode){var check=Ui.Check("",selected.Contains(id));System.Windows.Automation.AutomationProperties.SetName(check,"选择任务："+task.S("title"));check.Checked+=(_,_)=>{selected.Add(id);selectionText.Text=$"已选择 {selected.Count} 项   ";};check.Unchecked+=(_,_)=>{selected.Remove(id);selectionText.Text=$"已选择 {selected.Count} 项   ";};chips.Children.Add(check);}
         chips.Children.Add(Ui.Chip(Priorities[p],Ui.Color(new[]{"#C66976","#C28C37","#8C92A7","#6C9B92"}[p]),Ui.Color(new[]{"#FBECEF","#FCF3E4","#F2F3F7","#ECF5F2"}[p])));
         foreach(var t in task.A("tags").Take(2)){var ink=TagBrush(t.S("color"));var bg=ink.Clone();bg.Opacity=.10;chips.Children.Add(Ui.Chip(t.S("name"),ink,bg));}if(task.A("tags").Count>2)chips.Children.Add(Ui.Chip("+"+(task.A("tags").Count-2),Ui.Muted));top.Children.Add(chips);content.Children.Add(top);
@@ -204,7 +204,7 @@ internal sealed partial class BoardWindow : Window
         var note=task.S("note");if(note.Length>0){var preview=Ui.Text(note.Replace("\r","").Replace("\n"," "),12,Ui.Muted);preview.MaxHeight=36;preview.LineHeight=18;preview.TextTrimming=TextTrimming.CharacterEllipsis;preview.Margin=new Thickness(0,3,0,8);content.Children.Add(preview);}
         if(task.A("blocked").Count>0)content.Children.Add(Ui.Text("等待："+string.Join("、",task.A("blocked").Select(d=>d.S("title"))),11,Ui.Color("#BE914E")));
         var metadata=Ui.Row();string date=task.S("due_date");bool overdue=date!=""&&date.CompareTo(DateTime.Today.ToString("yyyy-MM-dd"))<0&&task.S("status")!="完成";
-        var dueLabel=Ui.Text(date!=""?"◷  "+Ui.Due(date):"未设截止日期",11,overdue?Ui.Color("#C66976"):Ui.Muted);dueLabel.ToolTip=date;dueLabel.Margin=new Thickness(0,4,14,4);metadata.Children.Add(dueLabel);
+        var dueLabel=Ui.Text(date!=""?(task.S("status")=="完成"?"截止 "+date[5..]:"◷  "+Ui.Due(date)):"未设截止日期",11,overdue?Ui.Color("#C66976"):Ui.Muted);dueLabel.ToolTip=date;dueLabel.Margin=new Thickness(0,4,14,4);metadata.Children.Add(dueLabel);
         if(task.A("checklist").Count>0)metadata.Children.Add(Ui.Text($"☑ {task.A("checklist").Count(c=>c.B("done"))}/{task.A("checklist").Count}   ",11,Ui.Muted));
         if(task.A("files").Count>0)metadata.Children.Add(Ui.Text($"附件 {task.A("files").Count}   ",11,Ui.Muted));
         if(task["options"].S("today")==DateTime.Today.ToString("yyyy-MM-dd"))metadata.Children.Add(Ui.Text("今日  ",11,Ui.Purple));
