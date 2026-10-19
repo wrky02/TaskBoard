@@ -18,6 +18,12 @@ internal sealed class App : Application
         FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement),new FrameworkPropertyMetadata(XmlLanguage.GetLanguage("zh-CN")));
         var app=new App{ShutdownMode=ShutdownMode.OnMainWindowClose};
         app.Resources=new ResourceDictionary{Source=new Uri("pack://application:,,,/Theme.xaml")};
+        // Installer acceptance checks the actual packaged font, not just its requested family name.
+        if(Array.IndexOf(args,"--verify-ui-resources")>=0){
+            var typeface=new System.Windows.Media.Typeface(Ui.Font,FontStyles.Normal,FontWeights.Normal,FontStretches.Normal);
+            bool valid=typeface.TryGetGlyphTypeface(out var face)&&face.CharacterToGlyphMap.ContainsKey('任')&&face.CharacterToGlyphMap.ContainsKey('务')&&face.FontUri.ToString().Contains("NotoSansSC",StringComparison.OrdinalIgnoreCase);
+            Environment.ExitCode=valid?0:1;return;
+        }
         var data=Environment.GetEnvironmentVariable("TASKBOARD_DATA_ROOT")??Path.Combine(AppContext.BaseDirectory,"Data");
         for(int i=0;i<args.Length-1;i++)if(args[i]=="--data-root")data=args[i+1];
         var key=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(data).ToUpperInvariant())))[..24];

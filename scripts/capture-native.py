@@ -106,6 +106,7 @@ try:
     def popup_control(id):
         return until(lambda:next((c for w in Desktop(backend='uia').windows(process=process.pid) for c in w.descendants() if c.element_info.automation_id==id),None))
     header=popup_control('PART_HeaderButton');month=header.window_text()
+    assert len({c.window_text() for w in Desktop(backend='uia').windows(process=process.pid) for c in w.descendants(control_type='Text') if c.window_text() in ('日','一','二','三','四','五','六')})==7, 'Calendar must expose all seven weekday labels'
     popup_control('PART_NextButton').invoke();until(lambda:popup_control('PART_HeaderButton').window_text()!=month)
     popup_control('PART_PreviousButton').invoke();until(lambda:popup_control('PART_HeaderButton').window_text()==month)
     capture(edit,'date-picker')

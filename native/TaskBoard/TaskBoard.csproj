@@ -9,5 +9,5 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
-  <ItemGroup><Resource Include="../../source/taskboard/taskboard.ico" Link="taskboard.ico" /><Resource Include="../../source/taskboard/NotoSansCJKsc-Regular.otf" Link="fonts/NotoSansCJKsc-Regular.otf" /><Content Include="../../source/taskboard/FONT_LICENSE.txt" Link="FONT_LICENSE.txt" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Resource Include="../../source/taskboard/taskboard.ico" Link="taskboard.ico" /><Resource Include="Fonts/NotoSansSC-Regular.ttf" Link="fonts/NotoSansSC-Regular.ttf" /><Content Include="Fonts/OFL.txt" Link="FONT_LICENSE.txt" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

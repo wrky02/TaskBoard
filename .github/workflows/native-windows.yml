@@ -112,6 +112,9 @@ jobs:
             # Prove the published app is self-contained, regardless of runner SDKs.
             $env:DOTNET_ROOT=Join-Path $env:RUNNER_TEMP 'no-dotnet-here'
             $env:DOTNET_MULTILEVEL_LOOKUP='0'
+            $fontCheck=Start-Process "$install/TaskBoard.exe" -ArgumentList '--verify-ui-resources' -Wait -PassThru
+            if ($fontCheck.ExitCode -ne 0) { throw 'Bundled Chinese font failed to resolve from installed resources' }
+            if (-not (Test-Path "$install/FONT_LICENSE.txt")) { throw 'Bundled font license is missing' }
             python scripts/check-native.py "$install/TaskBoard.exe" "$install/Data" *> artifacts/native-ui.log
             if ($LASTEXITCODE -ne 0) {
               python scripts/report-ci.py artifacts/native-ui.log 'Native UI acceptance'
