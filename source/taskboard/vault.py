@@ -464,34 +464,39 @@ def activate_restored(root, token: RestoreContext) -> None:
 def _path_instance(path) -> tuple[Path, Vault | None, str | None]:
     nominal = Path(path).absolute()
     path = nominal.resolve()
+    def relative_to(candidate, parent):
+        try:
+            candidate_name = os.path.normcase(os.path.abspath(os.fspath(candidate)))
+            parent_name = os.path.normcase(os.path.abspath(os.fspath(parent)))
+            if os.path.commonpath((candidate_name, parent_name)) != parent_name:
+                return None
+            return os.path.relpath(candidate_name, parent_name)
+        except (ValueError, OSError):
+            return None
     with _guard:
         roots = sorted(_sessions, key=lambda x: len(x.parts), reverse=True)
         for root in roots:
-            try:
-                relative = nominal.relative_to(root)
-            except ValueError:
-                relative = None
+            relative = relative_to(nominal, root)
             if relative is not None:
                 # Resolve lexical components only after detecting links. Windows
                 # treats junctions as directory-like entries, and relying only
                 # on the final resolved path can miss an intermediate reparse
                 # point on some Python/filesystem combinations.
                 current = root
-                for part in relative.parts:
+                parts = Path(relative).parts
+                for part in parts:
                     current = current / part
                     is_junction = getattr(current, 'is_junction', lambda: False)
                     if current.is_symlink() or is_junction():
                         raise ValueError('加密工作区文件不能通过链接指向其他位置')
-                try:
-                    path.relative_to(root)
-                except ValueError:
+                resolved_relative = relative_to(path, root)
+                if resolved_relative is None:
                     raise ValueError('加密工作区文件不能通过链接指向工作区之外') from None
-                return path, _sessions[root], path.relative_to(root).as_posix()
-            try:
-                path.relative_to(root)
-            except ValueError:
+                return path, _sessions[root], Path(resolved_relative).as_posix()
+            resolved_relative = relative_to(path, root)
+            if resolved_relative is None:
                 continue
-            return path, _sessions[root], path.relative_to(root).as_posix()
+            return path, _sessions[root], Path(resolved_relative).as_posix()
     for parent in path.parents:
         if is_enabled(parent):
             raise VaultLocked('加密工作区已锁定')
