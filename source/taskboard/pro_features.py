@@ -267,10 +267,17 @@ def validate_save(db, item):
     # An explicitly changed custom state wins. A legacy status update should not
     # be accidentally overwritten by the unchanged custom state in a snapshot.
     if project != old.get('project_id'):
-        # A new task inherits the workspace default project/state as a
-        # convenience. Explicitly clearing its project must also clear that
-        # inherited state instead of validating it against project=None.
-        state = _state_for(db, project, status, cancelled)
+        # A new task inherits the workspace default state as a convenience.
+        # When moving projects, keep an explicitly selected state only if it
+        # belongs to the destination; otherwise choose its matching state.
+        row = db.execute('SELECT * FROM pro_states WHERE id=?', (state,)).fetchone() if state else None
+        if row and row['project_id'] == project:
+            status = KINDS[row['kind']]
+            cancelled = row['kind'] == 'cancelled'
+        else:
+            if status != old.get('last_status'):
+                cancelled = False
+            state = _state_for(db, project, status, cancelled)
     elif state and (state != old.get('state_id') or status == old.get('last_status')):
         row = db.execute('SELECT * FROM pro_states WHERE id=?', (state,)).fetchone()
         if not row or row['project_id'] != project:
