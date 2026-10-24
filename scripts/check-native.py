@@ -22,7 +22,7 @@ from pywinauto import Desktop
 
 exe=Path(sys.argv[1]).resolve();root=Path(sys.argv[2]).resolve();root.mkdir(parents=True,exist_ok=True)
 artifacts=Path('artifacts');artifacts.mkdir(exist_ok=True)
-process=None;stop=threading.Event();violations=[];seen=set();completed=[]
+process=None;stop=threading.Event();violations=[];seen=set();completed=[];modal_history=[]
 
 def until(fn,timeout=30):
     deadline=time.monotonic()+timeout;last=None
@@ -72,6 +72,7 @@ def message_button(button_id):
     handle=message.handle
     buttons=message.children(class_name='Button')
     details=(message.window_text(),[(c.window_text(),c.control_id()) for c in message.children()])
+    modal_history.append(details)
     print('::notice title=Native modal diagnostic::'+repr(details),flush=True)
     try:button=message.child_window(control_id=button_id).wrapper_object()
     except Exception:
@@ -196,7 +197,7 @@ try:
         time.sleep(.25)
     if restored_count!=3:
         with sqlite3.connect(root/'tasks.sqlite3') as db:titles=[row[0] for row in db.execute('SELECT title FROM tasks ORDER BY id')]
-        raise AssertionError(f'Backup restore left {restored_count} tasks; expected 3. Titles: {titles!r}')
+        raise AssertionError(f'Backup restore left {restored_count} tasks; expected 3. Titles: {titles!r}. Last native dialogs: {modal_history[-2:]!r}')
     assert db_scalar("SELECT COUNT(*) FROM tasks WHERE title='Restore rollback candidate'")==0
     close_window(center);record('create, preview and restore a verified recovery point')
     # Real installed icon and WPF class, not Edge app mode.
