@@ -11,7 +11,9 @@ if failures:
     text=text[first.start():]
     if len(text)>7000:text=text[:3500]+'\n… failure details truncated …\n'+text[-3500:]
 else:
-    text=text[-7000:]
+    # Generic build logs have no unittest marker; stay under GitHub's annotation
+    # limit so the actual terminal error at the end remains visible.
+    text=text[-3000:]
 text=re.sub(r'[A-Za-z0-9_-]{40,}', '[redacted]',text)
 text=re.sub(r'http://127\.0\.0\.1:\d+/#\S+', '[launch URL redacted]', text)
 escaped=text.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
