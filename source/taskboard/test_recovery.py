@@ -31,6 +31,23 @@ class RecoveryTests(unittest.TestCase):
     def task(self,title='初始任务'):
         return s.save_task(self.db,title,'完整正文','计划中',None)
 
+    def test_generation_swap_retries_windows_sharing_violation(self):
+        source=self.root/'replacement.tmp';destination=self.root/'replacement.json'
+        source.write_text('ready',encoding='utf-8')
+        transient=PermissionError(13,'file in use')
+        transient.winerror=32
+        real_replace=os.replace
+        calls=[]
+        def replace(source,destination):
+            calls.append((source,destination))
+            if len(calls)==1:raise transient
+            real_replace(source,destination)
+        with patch.object(r.os,'replace',side_effect=replace),patch.object(r.time,'sleep') as sleep:
+            r._replace_with_retry(source,destination)
+        self.assertEqual(destination.read_text(encoding='utf-8'),'ready')
+        self.assertEqual(len(calls),2)
+        sleep.assert_called_once_with(0.025)
+
     def test_manifest_hashes_legacy_compatibility_and_corruption(self):
         tid=self.task();s.add_file_bytes(self.db,tid,'资料.txt',b'original')
         path=self.root/'backup.zip';s.backup(self.db,path)

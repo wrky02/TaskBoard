@@ -41,6 +41,21 @@ def _sync_directory(path):
     finally: os.close(descriptor)
 
 
+def _replace_with_retry(source, destination):
+    """Retry transient Windows sharing violations during an atomic generation swap."""
+    deadline = time.monotonic() + 3.0
+    delay = 0.025
+    while True:
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) not in (5, 32, 33) or time.monotonic() >= deadline:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.2)
+
+
 def durable_json(path, value):
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
@@ -91,8 +106,8 @@ def recover_interrupted(root):
                 if target.exists():
                     displaced = interrupted/name
                     if displaced.exists(): raise ValueError('恢复现场存在冲突，未覆盖任何文件')
-                    os.replace(target, displaced)
-                os.replace(old, target)
+                    _replace_with_retry(target, displaced)
+                _replace_with_retry(old, target)
             elif had_old:
                 # A target without its predecessor was untouched, or an earlier
                 # recovery already rolled this component back before interruption.
@@ -101,7 +116,7 @@ def recover_interrupted(root):
             elif target.exists() and not pending.exists():
                 displaced = interrupted/name
                 if displaced.exists(): raise ValueError('恢复现场存在冲突，未覆盖任何文件')
-                os.replace(target, displaced)
+                _replace_with_retry(target, displaced)
         operation['phase'] = 'rolled-back'
     operation['recovered_at'] = utcnow()
     records = root/'recovery-records'; records.mkdir(exist_ok=True)
@@ -128,9 +143,9 @@ def replace_generation(root, staging, kind='restore'):
     try:
         for name in names:
             target = root/name
-            if target.exists(): os.replace(target, previous/name)
+            if target.exists(): _replace_with_retry(target, previous/name)
             _sync_directory(root); _checkpoint('old-'+name)
-            if (staging/name).exists(): os.replace(staging/name, target)
+            if (staging/name).exists(): _replace_with_retry(staging/name, target)
             _sync_directory(root); _checkpoint('new-'+name)
         operation['phase']='committed'; durable_json(root/JOURNAL, operation)
         _checkpoint('committed')
