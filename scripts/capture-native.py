@@ -92,8 +92,8 @@ def capture(win,name):
     else:win.wrapper_object().capture_as_image().save(out/(name+'.png'))
 
 try:
-    win=Desktop(backend='uia').window(process=process.pid,title_re='任务看板系统.*',control_type='Window');win.wait('visible',timeout=45)
-    control(win,'loginPassword').type_keys(password);control(win,'login').invoke();control(win,'quickTitle')
+    win=Desktop(backend='uia').window(process=process.pid,auto_id='mainWindow',control_type='Window');win.wait('visible',timeout=45)
+    control(win,'loginPassword').type_keys(password+'{ENTER}');control(win,'quickTitle')
     capture(win,'board')
     control(win,'batchSelect').invoke();capture(win,'batch-selection');control(win,'batchSelect').invoke()
     control(win,'more-1').invoke()
@@ -101,18 +101,18 @@ try:
     # UIA menu nesting differs between Windows builds; locate by descendants.
     today=until(lambda:next((x for w in Desktop(backend='uia').windows(process=process.pid) for x in w.descendants(control_type='MenuItem') if x.window_text()=='移出今日计划'),None))
     capture(win,'task-menu');today.invoke();control(win,'task-1')
-    control(win,'task-1').invoke();edit=dialog('编辑任务');capture(edit,'task-editor')
-    control(edit,'editorDue');edit.child_window(auto_id='PART_Button',control_type='Button').invoke()
+    control(win,'task-1').invoke();control(win,'editorPane');edit=win.child_window(auto_id='editorPane');capture(win,'task-editor')
+    control(edit,'editorDue');edit.child_window(auto_id='editorDue').child_window(auto_id='PART_Button',control_type='Button').invoke()
     def popup_control(id):
         return until(lambda:next((c for w in Desktop(backend='uia').windows(process=process.pid) for c in w.descendants() if c.element_info.automation_id==id),None))
     header=popup_control('PART_HeaderButton');month=header.window_text()
     assert len({c.window_text() for w in Desktop(backend='uia').windows(process=process.pid) for c in w.descendants(control_type='Text') if c.window_text() in ('日','一','二','三','四','五','六')})==7, 'Calendar must expose all seven weekday labels'
     popup_control('PART_NextButton').invoke();until(lambda:popup_control('PART_HeaderButton').window_text()!=month)
     popup_control('PART_PreviousButton').invoke();until(lambda:popup_control('PART_HeaderButton').window_text()==month)
-    capture(edit,'date-picker')
+    capture(win,'date-picker')
     # Close popup without changing selected date.
-    edit.type_keys('{ESC}')
-    edit_handle=edit.handle;control(edit,'closeEditor').invoke();until(lambda:not win32gui.IsWindow(edit_handle))
+    edit.child_window(auto_id='editorDue').child_window(auto_id='PART_Button',control_type='Button').invoke()
+    control(edit,'closeEditor').invoke();until(lambda:not win.child_window(auto_id='editorPane').exists(timeout=.2))
     # Verify navigation selection and an empty filtered state.
     control(win,'nav我的今天').invoke();capture(win,'my-day')
     control(win,'nav看板').invoke();control(win,'search').set_edit_text('no-matching-demo-task');capture(win,'empty-search');control(win,'search').set_edit_text('')
@@ -120,7 +120,7 @@ try:
     win32gui.SetWindowPos(win.handle,0,0,0,1024,700,win32con.SWP_NOZORDER)
     capture(win,'compact-board')
     win32gui.PostMessage(win.handle,win32con.WM_CLOSE,0,0);process.wait(timeout=20)
-    (out/'README.md').write_text('# Native UI review · 3.0.1\n\nActual Windows WPF captures. All task names and data are synthetic fixtures from scripts/capture-native.py. No user database, credentials, or attachments are published.\n',encoding='utf-8')
+    (out/'README.md').write_text('# Native UI review · 4.0.0\n\nActual Windows WPF captures. All task names and data are synthetic fixtures from scripts/capture-native.py. No user database, credentials, or attachments are published.\n',encoding='utf-8')
     print('::notice title=Native visual review::PASS: real WPF board, editor, calendar popup, context menu, batch mode, empty search and compact layout captured with synthetic data')
 except Exception:
     print(traceback.format_exc())

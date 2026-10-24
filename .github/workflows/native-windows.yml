@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-2022
-    timeout-minutes: 25
+    timeout-minutes: 40
     permissions:
       contents: write
       id-token: write
@@ -19,11 +19,11 @@ jobs:
       PYTHONUTF8: '1'
       SIGNING_ENABLED: ${{ vars.TASKBOARD_SIGNING_ENABLED }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - name: Build self-contained native desktop and private data engine
@@ -37,6 +37,16 @@ jobs:
             python scripts/report-ci.py artifacts/native-build.log 'Native build'
             throw
           }
+      - name: Measure a ten-thousand-task workspace
+        shell: pwsh
+        run: |
+          ./.native-build-venv/Scripts/python.exe scripts/benchmark-workspace.py *> artifacts/native-performance.log
+          if ($LASTEXITCODE -ne 0) {
+            python scripts/report-ci.py artifacts/native-performance.log 'Native performance regression'
+            throw 'Native performance regression ceiling exceeded'
+          }
+          $report=Get-Content artifacts/native-performance.json -Raw | ConvertFrom-Json
+          Write-Output ('::notice title=Native performance::10,000 tasks; search p95 '+$report.observations.search.p95_ms+' ms; page p95 '+$report.observations.page_100.p95_ms+' ms; save p95 '+$report.observations.save.p95_ms+' ms. See report for interactive targets and regression ceilings.')
       - name: Authenticate approved signing identity using OIDC
         if: env.SIGNING_ENABLED == 'true'
         uses: azure/login@v3
@@ -88,13 +98,13 @@ jobs:
         shell: pwsh
         run: |
           if ($env:SIGNING_ENABLED -eq 'true') {
-            ./scripts/verify-signatures.ps1 -Paths dist/Setup_TaskBoard_3.0.1.exe
+            ./scripts/verify-signatures.ps1 -Paths dist/Setup_TaskBoard_4.0.0.exe
             'SIGNED: verified Authenticode chain and RFC3161 timestamp.' | Set-Content dist/SIGNING-STATUS.txt
           } else {
             'UNSIGNED: no trusted signing identity configured. Publisher metadata wrky02 does not imply a verified signer.' | Set-Content dist/SIGNING-STATUS.txt
             Write-Output '::notice title=Code signing::Unsigned build: no trusted signing identity configured. See docs/CODE-SIGNING.md.'
           }
-          (Get-FileHash dist/Setup_TaskBoard_3.0.1.exe -Algorithm SHA256).Hash.ToLower() + '  Setup_TaskBoard_3.0.1.exe' | Set-Content dist/SHA256SUMS.txt
+          (Get-FileHash dist/Setup_TaskBoard_4.0.0.exe -Algorithm SHA256).Hash.ToLower() + '  Setup_TaskBoard_4.0.0.exe' | Set-Content dist/SHA256SUMS.txt
       - name: Install and exercise actual native controls
         shell: pwsh
         run: |
@@ -103,9 +113,9 @@ jobs:
             python -m pip install pywinauto==0.6.9 psutil==7.1.0 Pillow==11.3.0
             if ($LASTEXITCODE -ne 0) { throw 'UI automation dependencies failed' }
             $install=Join-Path $env:RUNNER_TEMP 'TaskBoard-native-install'
-            $p=Start-Process dist/Setup_TaskBoard_3.0.1.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
+            $p=Start-Process dist/Setup_TaskBoard_4.0.0.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
             if ($p.ExitCode -ne 0) { throw 'Native installation failed' }
-            $company=(Get-Item dist/Setup_TaskBoard_3.0.1.exe).VersionInfo.CompanyName
+            $company=(Get-Item dist/Setup_TaskBoard_4.0.0.exe).VersionInfo.CompanyName
             if ($company.Trim() -ne 'wrky02') { throw 'Incorrect publisher metadata' }
             $entry=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{A71D03F1-966D-49D2-A264-39F7BD20E097}_is1'
             if (([string]$entry.Publisher).Trim() -ne 'wrky02') { throw 'Incorrect installed publisher' }
@@ -117,6 +127,11 @@ jobs:
             if (Test-Path $fontReport) { Write-Output ('::notice title=Native font diagnostic::'+(Get-Content $fontReport -Raw)) }
             if ($fontCheck.ExitCode -ne 0) { throw 'Bundled Chinese font failed to resolve from installed resources' }
             if (-not (Test-Path "$install/FONT_LICENSE.txt")) { throw 'Bundled font license is missing' }
+            $buildInfo=Get-Content "$install/BUILD-INFO.json" -Raw | ConvertFrom-Json
+            if ($buildInfo.version -ne '4.0.0' -or $buildInfo.source_commit -ne $env:GITHUB_SHA -or $buildInfo.dotnet_target -ne 'net10.0-windows') { throw 'Installed build metadata does not match this source build' }
+            foreach ($notice in @('DOTNET-LICENSE.txt','DOTNET-ThirdPartyNotices.txt','PYTHON-LICENSE.txt','SQLCIPHER-LICENSE.md')) {
+              if (-not (Test-Path "$install/licenses/$notice")) { throw "Missing runtime notice: $notice" }
+            }
             python scripts/check-native.py "$install/TaskBoard.exe" "$install/Data" *> artifacts/native-ui.log
             if ($LASTEXITCODE -ne 0) {
               python scripts/report-ci.py artifacts/native-ui.log 'Native UI acceptance'
@@ -139,7 +154,7 @@ jobs:
         shell: pwsh
         run: |
           $install=Join-Path $env:RUNNER_TEMP 'TaskBoard-visual-install'
-          $p=Start-Process dist/Setup_TaskBoard_3.0.1.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
+          $p=Start-Process dist/Setup_TaskBoard_4.0.0.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw 'Visual review installation failed' }
           python scripts/capture-native.py "$install/TaskBoard.exe" "$install/PreviewData" *> artifacts/native-visual.log
           if ($LASTEXITCODE -ne 0) {
@@ -151,15 +166,15 @@ jobs:
         if: github.ref == 'refs/heads/build/native-windows'
         shell: pwsh
         run: ./scripts/publish-ui-preview.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: TaskBoard-Native-diagnostics
           path: artifacts/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
-          name: TaskBoard-Native-Windows-3.0.1
+          name: TaskBoard-Native-Windows-4.0.0
           path: |
-            dist/Setup_TaskBoard_3.0.1.exe
+            dist/Setup_TaskBoard_4.0.0.exe
             dist/SHA256SUMS.txt
             dist/SIGNING-STATUS.txt

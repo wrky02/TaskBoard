@@ -1,5 +1,5 @@
 #define MyAppName "任务看板系统"
-#define MyAppVersion "3.0.1"
+#define MyAppVersion "4.0.0"
 #define MyAppExeName "TaskBoard.exe"
 
 [Setup]
@@ -14,7 +14,7 @@ VersionInfoTextVersion={#MyAppVersion}
 DefaultDirName={localappdata}\Programs\TaskBoard
 DefaultGroupName=任务看板系统
 OutputDir=..\..\dist
-OutputBaseFilename=Setup_TaskBoard_3.0.1
+OutputBaseFilename=Setup_TaskBoard_4.0.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

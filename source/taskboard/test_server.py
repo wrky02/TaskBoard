@@ -74,7 +74,11 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.request('/api/task/action',{'id':tid,'action':'archive'})[0],200)
         self.assertIn('中文任务',self.request('/api/export/csv')[1].decode('utf-8-sig'))
         backup=self.request('/api/backup')[1]
-        with zipfile.ZipFile(io.BytesIO(backup)) as z:self.assertEqual(len(z.namelist()),2)
+        with zipfile.ZipFile(io.BytesIO(backup)) as z:
+            self.assertIn('tasks.sqlite3',z.namelist())
+            self.assertIn('manifest.json',z.namelist())
+            self.assertTrue(any(n.startswith('attachments/') for n in z.namelist()))
+            self.assertIsNone(z.testzip())
         self.assertEqual(self.request('/api/task/action',{'id':tid,'action':'trash'})[0],200)
         self.assertEqual(self.request('/api/state')[1]['trash'][0]['id'],tid)
         self.assertEqual(self.request('/api/restore',raw=b'bad zip')[0],400)

@@ -9,6 +9,7 @@ import csv
 import hashlib
 import hmac
 import io
+import json
 import os
 import re
 import secrets
@@ -72,6 +73,8 @@ def migrate_data_root(install_data_dir):
       always be recovered from the legacy location.
     """
     install_data_dir = Path(install_data_dir)
+    import recovery
+    if install_data_dir.exists(): recovery.recover_interrupted(install_data_dir)
     legacy_root = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'TaskBoardAccio'
     legacy_db = legacy_root / 'tasks.sqlite3'
     target_db = install_data_dir / 'tasks.sqlite3'
@@ -122,11 +125,8 @@ def migrate_data_root(install_data_dir):
 
         # Commit: move the verified staging content into place, then rename
         # (not delete) the legacy directory so it remains recoverable.
-        os.replace(staging / 'tasks.sqlite3', target_db)
-        installed_db = True
-        if target_files.exists(): target_files.rmdir()  # verified empty above
-        os.replace(staging / 'attachments', target_files)
-        installed_files = True
+        (staging / 'history-objects').mkdir(exist_ok=True)
+        recovery.replace_generation(install_data_dir, staging, 'migration')
         legacy_renamed = legacy_root.parent / ('TaskBoardAccio-migrated-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
         try:
             os.replace(legacy_root, legacy_renamed)
@@ -191,9 +191,15 @@ def connect():
     DB = ROOT / 'tasks.sqlite3'
     FILES = ROOT / 'attachments'
     ROOT.mkdir(parents=True, exist_ok=True)
+    import recovery
+    recovery.recover_interrupted(ROOT)
     FILES.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB)
-    db.row_factory = sqlite3.Row
+    try:
+        import vault
+        db = vault.connection(ROOT)
+    except ImportError:
+        db = sqlite3.connect(DB)
+        db.row_factory = sqlite3.Row
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA busy_timeout=5000')
     try: retire_legacy_schema(db)
@@ -247,6 +253,12 @@ def connect():
     try:
         import features
         features.migrate(db)
+        for module in ('pro_features', 'attachment_service', 'recovery'):
+            try: extension = __import__(module)
+            except ModuleNotFoundError as exc:
+                if exc.name == module: continue
+                raise
+            extension.migrate(db)
     except Exception:
         db.close()
         raise
@@ -402,7 +414,9 @@ def move(db,task_id,target,index=None):
     if not old: raise ValueError('任务不存在')
     if old['archived_at']: raise ValueError('请先取消归档再调整任务阶段')
     import features
+    import pro_features
     with db:
+        pro_features.validate_transition(db,task_id,target)
         features.validate_completion(db,task_id,target)
         ids=[r['id'] for r in db.execute('SELECT id FROM tasks WHERE deleted_at IS NULL AND status=? ORDER BY sort_order,id DESC',(target,)) if r['id']!=task_id]
         index = len(ids) if index is None else max(0,min(int(index),len(ids)))
@@ -415,6 +429,7 @@ def move(db,task_id,target,index=None):
         if old['status']!=target: _event(db,task_id,old['title'],'状态变更',f"{old['status']} → {target}")
         else: _event(db,task_id,old['title'],'拖拽排序',f'{target} 第 {index+1} 位')
         features.completed(db,task_id,old['status'])
+        pro_features.transitioned(db,task_id,old['status'])
     return ids
 
 def trash(db,task_id):
@@ -438,9 +453,11 @@ def erase(db,task_id):
     if db.execute('SELECT 1 FROM task_dependencies WHERE prerequisite=?',(task_id,)).fetchone(): raise ValueError('其他任务仍依赖此任务，请先移除依赖')
     names=[r['stored_name'] for r in db.execute('SELECT stored_name FROM attachments WHERE task_id=?',(task_id,))]
     with db:
+        import recovery
+        recovery.history_record(db, task_id, 'before-erase')
+        for name in names: recovery.retain_removed_file(db, name)
         db.execute('DELETE FROM tasks WHERE id=?',(task_id,))
         _event(db,task_id,old['title'],'彻底删除')
-    for name in names: (FILES/name).unlink(missing_ok=True)
 
 
 def duplicate_task(db, task_id):
@@ -529,7 +546,9 @@ def add_file_bytes(db,task_id,filename,content,image=False):
     filename=Path(filename).name[:240]
     ext=Path(filename).suffix.lower()
     stored=uuid.uuid4().hex+(ext if len(ext)<12 else '.bin')
-    path=FILES/stored; path.write_bytes(content)
+    path=FILES/stored
+    import recovery
+    recovery._write_file(path, content)
     try:
         with db:
             cur=db.execute('INSERT INTO attachments(task_id,filename,stored_name,is_image,created_at) VALUES(?,?,?,?,?)',(task_id,filename,stored,int(image),now()))
@@ -549,9 +568,11 @@ def remove_file(db,attachment_id):
     if not row:return
     old=task(db,row['task_id'],True)
     with db:
+        import recovery
+        recovery.history_record(db, row['task_id'], 'before-file-remove')
+        recovery.retain_removed_file(db, row['stored_name'])
         db.execute('DELETE FROM attachments WHERE id=?',(attachment_id,))
         _event(db,row['task_id'],old['title'] if old else '任务','移除附件',row['filename'])
-    (FILES/row['stored_name']).unlink(missing_ok=True)
 
 def activity(db,limit=200,task_id=None):
     if task_id:
@@ -567,94 +588,162 @@ def reminders(db,today=None):
     return overdue,soon
 
 
+def _archive(source, password=None, recovery_key=None):
+    from contextlib import contextmanager
+    @contextmanager
+    def opened():
+        try:
+            import vault
+        except ImportError:
+            with open(source, 'rb') as stream: yield stream
+        else:
+            with vault.open_archive(source, root=ROOT, password=password, recovery_key=recovery_key) as stream: yield stream
+    return opened()
+
+
+def _snapshot_open(path, root=None):
+    try:
+        import vault
+        return vault.open_snapshot(path, root or ROOT, readonly=True)
+    except ImportError:
+        connection=sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro',uri=True)
+        connection.row_factory=sqlite3.Row
+        return connection
+
+
+def _hash_file(path):
+    digest=hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for chunk in iter(lambda:stream.read(1024*1024),b''):digest.update(chunk)
+    return digest.hexdigest()
+
+
 def backup(db,destination):
+    """Atomic, independently verified full archive from one database snapshot.
+
+    Physical attachments are retained after logical deletion, so the snapshot's
+    reference set cannot disappear while another connection edits the live DB.
+    """
     destination=Path(destination)
     temp=ROOT/('snapshot-'+uuid.uuid4().hex+'.sqlite3')
+    output=destination.with_name(destination.name+'.'+uuid.uuid4().hex+'.pending')
     try:
-        target=sqlite3.connect(temp)
-        try: db.backup(target)
-        finally: target.close()
-        names=[r['stored_name'] for r in db.execute('SELECT stored_name FROM attachments')]
+        try:
+            import vault
+            vault.snapshot_database(db,temp,root=ROOT)
+            metadata=vault.backup_metadata(ROOT)
+        except ImportError:
+            target=sqlite3.connect(temp)
+            try:db.backup(target)
+            finally:target.close()
+            metadata=None
+        snapshot=_snapshot_open(temp)
+        try:
+            names=[r[0] for r in snapshot.execute('SELECT stored_name FROM attachments')]
+            objects=[r[0] for r in snapshot.execute('SELECT sha256 FROM history_objects')] if snapshot.execute("SELECT 1 FROM sqlite_master WHERE name='history_objects'").fetchone() else []
+            staged=[r[0] for r in snapshot.execute('SELECT token FROM native_staged_files WHERE finished=1')] if snapshot.execute("SELECT 1 FROM sqlite_master WHERE name='native_staged_files'").fetchone() else []
+        finally:snapshot.close()
+        paths={'tasks.sqlite3':temp}
         for name in names:
-            if not (FILES/name).is_file(): raise ValueError('附件缺失，未生成不完整备份：'+name)
-        with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as z:
-            z.write(temp,'tasks.sqlite3')
-            for name in names: z.write(FILES/name,'attachments/'+name)
-        validate_backup(destination)
-    finally: temp.unlink(missing_ok=True)
+            if not re.fullmatch(r'[a-f0-9]{32}(?:\.[a-zA-Z0-9]{1,11})?',name):raise ValueError('附件存储路径无效')
+            if not (FILES/name).is_file():raise ValueError('附件缺失，未生成不完整备份：'+name)
+            paths['attachments/'+name]=FILES/name
+        for digest in objects:
+            if not re.fullmatch(r'[a-f0-9]{64}',digest):raise ValueError('历史对象路径无效')
+            path=ROOT/'history-objects'/digest
+            if not path.is_file():raise ValueError('历史附件缺失，未生成不完整备份')
+            paths['history-objects/'+digest]=path
+        for token in staged:
+            if not re.fullmatch(r'[a-f0-9]{32}',token):raise ValueError('附件暂存路径无效')
+            path=ROOT/'staging'/token/'object'
+            if path.is_file():paths['staging/'+token+'/object']=path
+        manifest=dict(format='taskboard-backup',format_version=2,created_at=datetime.now().astimezone().isoformat(),files={})
+        with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as archive:
+            for name,path in paths.items():
+                digest=_hash_file(path)
+                manifest['files'][name]=dict(bytes=path.stat().st_size,sha256=digest)
+                archive.write(path,name)
+            if metadata:
+                content=json.dumps(metadata,ensure_ascii=False,sort_keys=True).encode()
+                archive.writestr('vault.json',content)
+                manifest['files']['vault.json']=dict(bytes=len(content),sha256=hashlib.sha256(content).hexdigest())
+            archive.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,sort_keys=True))
+        with output.open('rb') as stream:os.fsync(stream.fileno())
+        validate_backup(output)
+        os.replace(output,destination)
+        import recovery
+        recovery._sync_directory(destination.parent)
+    finally:
+        temp.unlink(missing_ok=True);output.unlink(missing_ok=True)
 
-def validate_backup(source):
+
+def validate_backup(source,password=None,recovery_key=None):
+    """Validate new manifests and legacy ZIPs without changing the live workspace."""
     source=Path(source)
-    with zipfile.ZipFile(source) as z:
-        infos=z.infolist()
-        if len(infos)>10000 or not infos or any(i.file_size>MAX_BACKUP_FILE for i in infos): raise ValueError('备份文件过大或为空')
+    with _archive(source,password,recovery_key) as stream, zipfile.ZipFile(stream) as z:
+        infos=z.infolist();names=[i.filename for i in infos]
+        if len(infos)>100000 or not infos or any(i.file_size>MAX_BACKUP_FILE for i in infos):raise ValueError('备份文件过大或为空')
+        if len(names)!=len(set(names)):raise ValueError('备份包含重复路径')
         for info in infos:
             name=info.filename
-            if info.compress_size and info.file_size / info.compress_size > 10000: raise ValueError('备份压缩比异常')
-            if name=='tasks.sqlite3':continue
-            if not re.fullmatch(r'attachments/[a-f0-9]{32}(?:\.[a-zA-Z0-9]{1,11})?',name):raise ValueError('备份包含无效路径')
+            if info.compress_size and info.file_size/info.compress_size>10000:raise ValueError('备份压缩比异常')
+            if name in ('tasks.sqlite3','manifest.json','vault.json'):continue
+            if not re.fullmatch(r'(?:attachments/[a-f0-9]{32}(?:\.[a-zA-Z0-9]{1,11})?|history-objects/[a-f0-9]{64}|staging/[a-f0-9]{32}/object)',name):raise ValueError('备份包含无效路径')
         if sum(i.file_size for i in infos)>4*1024*1024*1024:raise ValueError('备份解压体积过大')
-        if len([i for i in infos if i.filename=='tasks.sqlite3'])!=1:raise ValueError('缺少数据库')
+        if names.count('tasks.sqlite3')!=1:raise ValueError('缺少数据库')
         if z.testzip() is not None:raise ValueError('备份压缩包损坏')
-        with tempfile.TemporaryDirectory(prefix='taskboard-verify-') as tmp:
-            dbpath=Path(tmp)/'test.sqlite3'; dbpath.write_bytes(z.read('tasks.sqlite3'))
-            test=sqlite3.connect(f'file:{dbpath.as_posix()}?mode=ro',uri=True)
-            try:
-                if test.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('备份数据库损坏')
-                for table in ('settings','tasks','attachments'):
-                    if not test.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():raise ValueError('数据库结构不符')
-                refs=[r[0] for r in test.execute('SELECT stored_name FROM attachments')]
-                missing=set(refs)-{i.filename.split('/',1)[1] for i in infos if i.filename.startswith('attachments/')}
-                if missing:raise ValueError('备份缺少附件')
-            finally: test.close()
+        if 'manifest.json' in names:
+            if z.getinfo('manifest.json').file_size>32*1024*1024:raise ValueError('备份清单过大')
+            manifest=json.loads(z.read('manifest.json'))
+            if manifest.get('format')!='taskboard-backup' or manifest.get('format_version')!=2:raise ValueError('不支持的备份格式')
+            entries=manifest.get('files',{})
+            if set(entries)!=set(names)-{'manifest.json'}:raise ValueError('备份清单与内容不一致')
+            for name,expected in entries.items():
+                digest=hashlib.sha256()
+                with z.open(name) as item:
+                    for block in iter(lambda:item.read(1024*1024),b''):digest.update(block)
+                if z.getinfo(name).file_size!=expected.get('bytes') or digest.hexdigest()!=expected.get('sha256'):raise ValueError('备份内容校验失败：'+name)
+        metadata=json.loads(z.read('vault.json')) if 'vault.json' in names else None
+        import vault
+        with vault.validate_backup_bytes(z.read('tasks.sqlite3'),metadata,root=ROOT,password=password,recovery_key=recovery_key) as test:
+            if test.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('备份数据库损坏')
+            for table in ('settings','tasks','attachments'):
+                if not test.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():raise ValueError('数据库结构不符')
+            refs=[r[0] for r in test.execute('SELECT stored_name FROM attachments')]
+            if any('attachments/'+name not in names for name in refs):raise ValueError('备份缺少附件')
+            if test.execute("SELECT 1 FROM sqlite_master WHERE name='history_objects'").fetchone():
+                if any('history-objects/'+r[0] not in names for r in test.execute('SELECT sha256 FROM history_objects')):raise ValueError('备份缺少历史附件')
+            if test.execute("SELECT 1 FROM sqlite_master WHERE name='native_staged_files'").fetchone() and test.execute("SELECT 1 FROM sqlite_master WHERE name='drafts'").fetchone():
+                drafts=[r[0] for r in test.execute('SELECT data FROM drafts')]
+                for row in test.execute('SELECT token FROM native_staged_files WHERE finished=1'):
+                    if any(row[0] in value for value in drafts) and 'staging/'+row[0]+'/object' not in names:raise ValueError('备份缺少草稿附件')
     return True
 
-def restore_backup(db,source):
-    """Validate first; preserve a recovery ZIP, stage and atomically swap files.
-    Returns a fresh SQLite connection and safety ZIP path; on failure, old db stays readable.
-    Caller must stop editing during this operation and replace its connection.
-    """
-    validate_backup(source)
+
+def restore_backup(db,source,password=None,recovery_key=None):
+    """Stage, verify, journal and switch generations; interrupted writes roll back."""
+    import recovery
+    recovery.wait_for_jobs(ROOT)
+    validate_backup(source,password,recovery_key)
     stamp=datetime.now().strftime('%Y%m%d-%H%M%S')
     safety=ROOT/f'pre-restore-{stamp}-{uuid.uuid4().hex[:6]}.zip'
     backup(db,safety)
-    staged=ROOT/('restore-'+uuid.uuid4().hex)
-    staged.mkdir()
-    old_db=ROOT/('old-'+uuid.uuid4().hex+'.sqlite3')
-    old_files=ROOT/('old-files-'+uuid.uuid4().hex)
-    swapped_db=swapped_files=False
-    fresh = None
+    staged=ROOT/('restore-'+uuid.uuid4().hex);staged.mkdir()
     try:
-        with zipfile.ZipFile(source) as z:
-            (staged/'attachments').mkdir()
-            for item in z.infolist():
-                dest=staged/item.filename
-                dest.write_bytes(z.read(item))
+        import vault
+        context=vault.stage_backup_archive(source,staged,ROOT,password=password,recovery_key=recovery_key)
         db.close()
-        os.replace(DB,old_db); swapped_db=True
-        os.replace(FILES,old_files); swapped_files=True
-        os.replace(staged/'tasks.sqlite3',DB)
-        os.replace(staged/'attachments',FILES)
+        recovery.replace_generation(ROOT,staged,'restore')
+        vault.activate_restored(ROOT,context)
         fresh=connect()
-        if fresh.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('恢复后的数据库校验失败')
-        # Windows clean-up of old files is best-effort; restoration is already committed.
-        try: old_db.unlink(missing_ok=True); shutil.rmtree(old_files)
-        except OSError: pass
+        if fresh.execute('PRAGMA integrity_check').fetchone()[0]!='ok':
+            fresh.close();raise ValueError('恢复后的数据库校验失败；恢复前副本仍保留')
         return fresh,safety
     except Exception:
-        # Close the replacement connection before renaming on Windows.
-        if fresh is not None: fresh.close()
-        # Revert to the original state if any step of the replacement fails.
-        try:
-            if swapped_db and old_db.exists(): os.replace(old_db,DB)
-            if swapped_files and old_files.exists():
-                if FILES.exists(): shutil.rmtree(FILES)
-                os.replace(old_files,FILES)
-        finally:
-            if staged.exists():shutil.rmtree(staged,ignore_errors=True)
+        recovery.recover_interrupted(ROOT)
         raise
     finally:
-        if staged.exists():shutil.rmtree(staged,ignore_errors=True)
+        if staged.exists() and not any(staged.iterdir()):staged.rmdir()
 
 
 def checklist_items(db, task_id):
@@ -736,9 +825,10 @@ def attachment_health_check(db):
                              'task_id': row['task_id'], 'task_title': row['title'] or '(任务已不存在)'})
     referenced = {row['stored_name'] for row in db_rows}
     orphaned = []
+    retained={r[0] for r in db.execute('SELECT stored_name FROM retained_files')} if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='retained_files'").fetchone() else set()
     if FILES.is_dir():
         for p in FILES.iterdir():
-            if p.is_file() and p.name not in referenced and not p.name.startswith('.'):
+            if p.is_file() and p.name not in referenced and p.name not in retained and not p.name.startswith('.'):
                 orphaned.append({'stored_name': p.name, 'size': p.stat().st_size})
     return {'checked_at': now(), 'total_attachments': len(db_rows),
             'missing': missing, 'orphaned_files': orphaned}

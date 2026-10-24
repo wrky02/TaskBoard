@@ -31,7 +31,7 @@ class NativeWorkerTests(unittest.TestCase):
         recovered=self.call('draft-get',key='native-new');self.assertEqual(recovered,payload)
         saved=self.call('save',**recovered,draft_key='native-new');task=saved['state']['tasks'][0]
         self.assertEqual(Path(task['files'][0]['path']).read_bytes(),b'attachment');self.assertNotIn('url',task['files'][0]);self.assertEqual(self.call('drafts')['drafts'],[])
-        self.assertEqual(saved['state']['version'],'3.0.1');self.assertEqual(saved['state']['info']['version'],'3.0.1')
+        self.assertEqual(saved['state']['version'],'4.0.0');self.assertEqual(saved['state']['info']['version'],'4.0.0')
         self.call('lock')
         with self.assertRaisesRegex(ValueError,'解锁'):self.call('drafts')
     def test_dependency_recurrence_bulk_undo(self):

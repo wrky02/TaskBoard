@@ -233,13 +233,30 @@ def undo(db,key):
         db.execute('DELETE FROM undo_actions WHERE id=?',(key,));s._event(db,tid,current['title'],'撤销操作')
 
 def directory_backup(files,destination):
-    import base64,zipfile
+    import base64,zipfile,hashlib,json,sqlite3,tempfile
+    from pathlib import Path
     seen=set();total=0
+    contents={}
+    for file in files:
+        name=file['name']
+        # Older migration clients may include the source backup manifest;
+        # validate imported data files and generate a fresh destination manifest.
+        if name=='manifest.json':continue
+        if name in seen or (name!='tasks.sqlite3' and not re.fullmatch(r'attachments/[a-f0-9]{32}(?:\.[a-zA-Z0-9]{1,11})?',name)):raise ValueError('旧数据文件路径无效或重复')
+        seen.add(name);data=base64.b64decode(file['data'],validate=True);total+=len(data)
+        if total>100*1024*1024:raise ValueError('目录导入超过 100 MB，请从旧版导出 ZIP 完整备份后导入')
+        contents[name]=data
+    if 'tasks.sqlite3' not in contents:raise ValueError('旧数据目录缺少数据库')
+    with tempfile.TemporaryDirectory() as tmp:
+        dbpath=Path(tmp)/'tasks.sqlite3';dbpath.write_bytes(contents['tasks.sqlite3'])
+        check=sqlite3.connect(dbpath);check.row_factory=sqlite3.Row
+        try:
+            if check.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('旧版数据库损坏')
+            if any('attachments/'+r[0] not in contents for r in check.execute('SELECT stored_name FROM attachments')):raise ValueError('旧数据目录缺少附件')
+        finally:check.close()
     with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as z:
-        for file in files:
-            name=file['name']
-            if name in seen or (name!='tasks.sqlite3' and not re.fullmatch(r'attachments/[a-f0-9]{32}(?:\.[a-zA-Z0-9]{1,11})?',name)):raise ValueError('旧数据文件路径无效或重复')
-            seen.add(name);data=base64.b64decode(file['data'],validate=True);total+=len(data)
-            if total>100*1024*1024:raise ValueError('目录导入超过 100 MB，请从旧版导出 ZIP 完整备份后导入')
-            z.writestr(name,data)
+        manifest={'format':'taskboard-backup','format_version':2,'files':{}}
+        for name,data in contents.items():
+            z.writestr(name,data);manifest['files'][name]={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+        z.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False))
     return preview_backup(destination)
