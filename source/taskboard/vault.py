@@ -476,27 +476,34 @@ def _path_instance(path) -> tuple[Path, Vault | None, str | None]:
     with _guard:
         roots = sorted(_sessions, key=lambda x: len(x.parts), reverse=True)
         for root in roots:
-            relative = relative_to(nominal, root)
-            if relative is not None:
-                # Resolve lexical components only after detecting links. Windows
-                # treats junctions as directory-like entries, and relying only
-                # on the final resolved path can miss an intermediate reparse
-                # point on some Python/filesystem combinations.
-                current = root
-                parts = Path(relative).parts
-                for part in parts:
-                    current = current / part
-                    is_junction = getattr(current, 'is_junction', lambda: False)
-                    if current.is_symlink() or is_junction():
-                        raise ValueError('加密工作区文件不能通过链接指向其他位置')
-                resolved_relative = relative_to(path, root)
-                if resolved_relative is None:
-                    raise ValueError('加密工作区文件不能通过链接指向工作区之外') from None
-                return path, _sessions[root], Path(resolved_relative).as_posix()
             resolved_relative = relative_to(path, root)
-            if resolved_relative is None:
-                continue
-            return path, _sessions[root], Path(resolved_relative).as_posix()
+            if resolved_relative is not None:
+                # The resolved destination is contained, but reject any
+                # intermediate symlink/junction beneath this workspace too.
+                current = nominal
+                while current != current.parent:
+                    try:
+                        parent_inside = relative_to(current.parent.resolve(), root) is not None
+                    except OSError:
+                        parent_inside = False
+                    is_junction = getattr(current, 'is_junction', lambda: False)
+                    if parent_inside and (current.is_symlink() or is_junction()):
+                        raise ValueError('加密工作区文件不能通过链接指向其他位置')
+                    current = current.parent
+                return path, _sessions[root], Path(resolved_relative).as_posix()
+            # A path written through an escaping link no longer resolves under
+            # the workspace. Walk lexical ancestors and detect the link at the
+            # boundary where its parent still resolves inside the workspace.
+            current = nominal
+            while current != current.parent:
+                try:
+                    parent_inside = relative_to(current.parent.resolve(), root) is not None
+                except OSError:
+                    parent_inside = False
+                is_junction = getattr(current, 'is_junction', lambda: False)
+                if parent_inside and (current.is_symlink() or is_junction()):
+                    raise ValueError('加密工作区文件不能通过链接指向工作区之外')
+                current = current.parent
     for parent in path.parents:
         if is_enabled(parent):
             raise VaultLocked('加密工作区已锁定')
