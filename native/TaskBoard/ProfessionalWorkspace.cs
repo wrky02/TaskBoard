@@ -63,7 +63,7 @@ internal sealed partial class BoardWindow
         AutomationProperties.SetAutomationId(list,"taskList");AutomationProperties.SetName(list,"任务列表，方向键选择，Enter打开");
         VirtualizingPanel.SetIsVirtualizing(list,true);VirtualizingPanel.SetVirtualizationMode(list,VirtualizationMode.Recycling);ScrollViewer.SetCanContentScroll(list,true);ScrollViewer.SetHorizontalScrollBarVisibility(list,ScrollBarVisibility.Disabled);
         var panel=new FrameworkElementFactory(typeof(VirtualizingStackPanel));list.ItemsPanel=new ItemsPanelTemplate(panel);
-        var row=new FrameworkElementFactory(typeof(VirtualTaskRow));row.SetValue(VirtualTaskRow.BoardProperty,this);list.ItemTemplate=new DataTemplate{VisualTree=row};
+        var row=new FrameworkElementFactory(typeof(VirtualTaskRow));row.SetBinding(VirtualTaskRow.BoardProperty,new Binding{RelativeSource=new RelativeSource(RelativeSourceMode.FindAncestor,typeof(BoardWindow),1)});list.ItemTemplate=new DataTemplate{VisualTree=row};
         list.KeyDown+=async(_,e)=>{if(e.Key==Key.Enter&&list.SelectedItem is JsonObject task){e.Handled=true;await Edit(task);}if(e.Key==Key.Apps||(e.Key==Key.F10&&Keyboard.Modifiers==ModifierKeys.Shift)){if(list.SelectedItem is JsonObject item){var menu=TaskCard(item).ContextMenu;menu.PlacementTarget=list;menu.IsOpen=true;e.Handled=true;}}};
         return list;
     }
