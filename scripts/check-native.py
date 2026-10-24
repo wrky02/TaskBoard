@@ -4,6 +4,7 @@ Also monitor the full process tree for browser processes and TCP listeners.
 import io
 import base64
 import json
+from contextlib import closing
 from datetime import date,timedelta
 import win32clipboard
 import win32gui
@@ -47,7 +48,9 @@ def monitor():
         except psutil.NoSuchProcess:pass
 
 def db_scalar(sql):
-    with sqlite3.connect(root/'tasks.sqlite3') as db:return db.execute(sql).fetchone()[0]
+    db=sqlite3.connect(root/'tasks.sqlite3')
+    try:return db.execute(sql).fetchone()[0]
+    finally:db.close()
 
 def mainwindow():return Desktop(backend='uia').window(process=process.pid,auto_id='mainWindow',control_type='Window')
 def control(win,id):
@@ -131,7 +134,7 @@ try:
     edit=editor();assert control(edit,'editorTitle').window_text()=='Recovered native draft'
     control(edit,'editorPriority').select('紧急');text(edit,'checkInput','Verify native controls');click(edit,'addCheck');click(edit,'saveTask')
     until(lambda:db_scalar('SELECT COUNT(*) FROM tasks')==2);assert db_scalar('SELECT COUNT(*) FROM drafts')==0
-    with sqlite3.connect(root/'tasks.sqlite3') as db:
+    with closing(sqlite3.connect(root/'tasks.sqlite3')) as db:
         row=db.execute("SELECT data FROM task_options WHERE task_id=(SELECT id FROM tasks WHERE title='Recovered native draft')").fetchone();assert json.loads(row[0])['priority']==0
         assert db.execute("SELECT due_date FROM tasks WHERE title='Recovered native draft'").fetchone()[0]==(date.today()+timedelta(days=1)).isoformat()
         assert db.execute('SELECT COUNT(*) FROM checklist_items').fetchone()[0]==1
@@ -196,7 +199,9 @@ try:
         if restored_count==3:break
         time.sleep(.25)
     if restored_count!=3:
-        with sqlite3.connect(root/'tasks.sqlite3') as db:titles=[row[0] for row in db.execute('SELECT title FROM tasks ORDER BY id')]
+        db=sqlite3.connect(root/'tasks.sqlite3')
+        try:titles=[row[0] for row in db.execute('SELECT title FROM tasks ORDER BY id')]
+        finally:db.close()
         raise AssertionError(f'Backup restore left {restored_count} tasks; expected 3. Titles: {titles!r}. Last native dialogs: {modal_history[-2:]!r}')
     assert db_scalar("SELECT COUNT(*) FROM tasks WHERE title='Restore rollback candidate'")==0
     close_window(center);record('create, preview and restore a verified recovery point')

@@ -734,11 +734,6 @@ def restore_backup(db,source,password=None,recovery_key=None):
         import vault
         context=vault.stage_backup_archive(source,staged,ROOT,password=password,recovery_key=recovery_key)
         db.close()
-        # Drop any short-lived SQLite cursor/connection cycles before Windows
-        # replaces the live database path; some SQLite builds finalize these
-        # handles only when cyclic garbage collection runs.
-        import gc
-        gc.collect()
         recovery.replace_generation(ROOT,staged,'restore')
         vault.activate_restored(ROOT,context)
         fresh=connect()
