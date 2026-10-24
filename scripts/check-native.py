@@ -70,9 +70,11 @@ def message_button(button_id):
     message.wait('visible',timeout=15)
     # Win32 IDYES=6 is stable across runner display languages.
     handle=message.handle
+    buttons=message.children(class_name='Button')
+    details=(message.window_text(),[(c.window_text(),c.control_id()) for c in message.children()])
+    print('::notice title=Native modal diagnostic::'+repr(details),flush=True)
     try:button=message.child_window(control_id=button_id).wrapper_object()
     except Exception:
-        buttons=message.children(class_name='Button')
         print('::notice title=Native modal buttons::'+repr([(b.control_id(),b.window_text()) for b in buttons]),flush=True)
         if not buttons:raise AssertionError('Native modal contains no actionable buttons')
         button=buttons[0]
