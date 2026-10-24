@@ -57,6 +57,10 @@ def control(win,id):
     result=win.child_window(auto_id=id);result.wait('exists enabled',timeout=30);return result.wrapper_object()
 def click(win,id):control(win,id).invoke()
 def text(win,id,value):control(win,id).set_edit_text(value)
+def verify_close_behavior(value,label):
+    click(win,'settings');settings=dialog('设置与备份')
+    assert control(settings,'closeBehavior').selected_text()==label
+    close_window(settings)
 def close_window(win):
     handle=win.handle
     win32gui.PostMessage(handle,win32con.WM_CLOSE,0,0)
@@ -208,11 +212,13 @@ try:
     # Real installed icon and WPF class, not Edge app mode.
     assert 'HwndWrapper' in Desktop(backend='win32').window(handle=win.handle).class_name()
     screenshot=win.wrapper_object().capture_as_image();screenshot.save(artifacts/'native-board.png')
-    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('最小化到托盘');click(settings,'saveSettings');control(settings,'saveSettings');close_window(settings)
+    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('最小化到托盘');click(settings,'saveSettings');control(settings,'saveSettings')
+    until(lambda:db_scalar("SELECT value FROM settings WHERE key='close_behavior'")=='tray');close_window(settings);verify_close_behavior('tray','最小化到托盘')
     main_handle=win.handle;win32gui.PostMessage(main_handle,win32con.WM_CLOSE,0,0);until(lambda:not win32gui.IsWindowVisible(main_handle))
     second=subprocess.run([str(exe),'--data-root',str(root)],timeout=15);assert second.returncode==0
     win=mainwindow();until(lambda:win.is_visible());assert process.poll() is None
-    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('退出程序');click(settings,'saveSettings');control(settings,'saveSettings');close_window(settings)
+    click(win,'settings');settings=dialog('设置与备份');control(settings,'closeBehavior').select('退出程序');click(settings,'saveSettings');control(settings,'saveSettings')
+    until(lambda:db_scalar("SELECT value FROM settings WHERE key='close_behavior'")=='exit');close_window(settings);verify_close_behavior('exit','退出程序')
     win32gui.PostMessage(win.handle,win32con.WM_CLOSE,0,0);process.wait(timeout=20);assert process.returncode==0
     record('tray close, second instance activation and exit')
     # Normal bounds and maximized state must survive a complete process restart.
