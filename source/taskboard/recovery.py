@@ -51,6 +51,23 @@ def _replace_with_retry(source, destination):
             return
         except OSError as exc:
             if getattr(exc, 'winerror', None) not in (5, 32, 33) or time.monotonic() >= deadline:
+                if getattr(exc, 'winerror', None) in (5, 32, 33):
+                    owners = []
+                    try:
+                        import psutil
+                        expected = os.path.normcase(os.path.abspath(os.fspath(source)))
+                        for process in psutil.process_iter(['pid', 'name']):
+                            try:
+                                if any(os.path.normcase(os.path.abspath(item.path)) == expected
+                                       for item in process.open_files()):
+                                    owners.append(f"{process.info['name']} ({process.info['pid']})")
+                            except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
+                                continue
+                    except ImportError:
+                        pass
+                    if owners:
+                        raise PermissionError(exc.errno, f'{exc.strerror}; file handle held by {", ".join(owners)}',
+                                              exc.filename, exc.winerror, exc.filename2) from exc
                 raise
             time.sleep(delay)
             delay = min(delay * 2, 0.2)
