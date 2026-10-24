@@ -12,6 +12,12 @@ class FeatureTests(unittest.TestCase):
     request=test_server.HTTPTests.request
     login=test_server.HTTPTests.login
     save=test_server.HTTPTests.save
+    def test_new_unassigned_task_does_not_keep_default_project_state(self):
+        self.login()
+        code,state,_=self.request('/api/task/save',{'title':'独立收件箱任务','status':'计划中','pro':{'project_id':None}})
+        self.assertEqual(code,200)
+        task=next(t for t in state['tasks'] if t['title']=='独立收件箱任务')
+        self.assertIsNone(task['pro']['project_id']);self.assertIsNone(task['pro']['state_id'])
     def test_recurrence_calendar_rules(self):
         self.assertEqual(f.next_due('2028-01-31','monthly','due',31,date(2028,1,31)),'2028-02-29')
         self.assertEqual(f.next_due('2028-02-29','monthly','due',31,date(2028,2,29)),'2028-03-31')

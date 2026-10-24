@@ -266,7 +266,12 @@ def validate_save(db, item):
     cancelled = bool(data.get('cancelled'))
     # An explicitly changed custom state wins. A legacy status update should not
     # be accidentally overwritten by the unchanged custom state in a snapshot.
-    if state and (state != old.get('state_id') or status == old.get('last_status')):
+    if project != old.get('project_id'):
+        # A new task inherits the workspace default project/state as a
+        # convenience. Explicitly clearing its project must also clear that
+        # inherited state instead of validating it against project=None.
+        state = _state_for(db, project, status, cancelled)
+    elif state and (state != old.get('state_id') or status == old.get('last_status')):
         row = db.execute('SELECT * FROM pro_states WHERE id=?', (state,)).fetchone()
         if not row or row['project_id'] != project:
             raise ValueError('任务状态不属于所选项目')
