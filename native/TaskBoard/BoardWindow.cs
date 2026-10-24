@@ -176,9 +176,27 @@ internal sealed partial class BoardWindow : Window
     }
     internal void Accept(JsonObject result)
     {
-        State=result["state"] is JsonObject s?s.Copy():result.Copy();UpdateNames();
+        if(result["state"] is JsonObject full) State=full.Copy();
+        else if(result["patch"] is JsonObject patch) ApplyPatch(patch);
+        else if(result["names"] is JsonObject) State["names"]=result["names"]!.DeepClone();
+        UpdateNames();
         if(result.S("undo")!=""){undo=result.S("undo");undoUntil=DateTime.Now.AddSeconds(15);undoButton.Visibility=Visibility.Visible;footer.Text="操作已完成，可在 15 秒内撤销";}else footer.Text="已保存 · "+DateTime.Now.ToString("HH:mm:ss");
         Render();
+    }
+    void ApplyPatch(JsonObject patch)
+    {
+        var changed=new HashSet<int>();
+        foreach(var id in patch.A("removed_ids")) if(int.TryParse(id?.ToString(),out var value)) changed.Add(value);
+        foreach(var group in new[]{"tasks","trash","archived"})
+            foreach(var task in patch.A(group)) if(int.TryParse(task?["id"]?.ToString(),out var value)) changed.Add(value);
+        foreach(var group in new[]{"tasks","trash","archived"})
+            for(int i=State.A(group).Count-1;i>=0;i--)
+                if(changed.Contains(State.A(group)[i]?.I("id")??0)) State.A(group).RemoveAt(i);
+        foreach(var group in new[]{"tasks","trash","archived"})
+        {
+            var current=State.A(group);
+            foreach(var task in patch.A(group)) current.Add(task?.DeepClone());
+        }
     }
     internal async Task Refresh(){Accept(await rpc.Call("state"));}
     void UpdateNames()

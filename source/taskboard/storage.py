@@ -668,7 +668,8 @@ def backup(db,destination):
                 archive.writestr('vault.json',content)
                 manifest['files']['vault.json']=dict(bytes=len(content),sha256=hashlib.sha256(content).hexdigest())
             archive.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,sort_keys=True))
-        with output.open('rb') as stream:os.fsync(stream.fileno())
+        # Windows requires a writable descriptor for FlushFileBuffers/fsync.
+        with output.open('rb+') as stream:os.fsync(stream.fileno())
         validate_backup(output)
         os.replace(output,destination)
         import recovery

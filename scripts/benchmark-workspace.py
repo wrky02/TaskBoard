@@ -15,6 +15,7 @@ import statistics
 import sys
 import tempfile
 import time
+import uuid
 
 
 def measure(operation, count):
@@ -78,14 +79,14 @@ def main():
                 nonlocal counter
                 counter+=1
                 token=worker.db.execute('SELECT updated_at FROM tasks WHERE id=?',(args.tasks,)).fetchone()[0]
-                return worker.dispatch('save',dict(id=args.tasks,updated_at=token,title=f'性能保存{counter}',note='计时真实保存及返回状态',status='计划中',due=due,tags=[],checklist=[],options=dict(priority=2)))
+                return worker.execute('save',dict(id=args.tasks,updated_at=token,title=f'性能保存{counter}',note='计时真实保存及返回增量补丁',status='计划中',due=due,tags=[],checklist=[],options=dict(priority=2)),uuid.uuid4().hex)
             saving,_=measure(save,args.samples)
             observations=dict(search=search,page_100=listing,full_state=snapshot,save=saving)
             ceilings=dict(search=args.max_query_ms,page_100=args.max_query_ms,save=args.max_save_ms)
             failures=[name for name,limit in ceilings.items() if observations[name]['p95_ms']>limit]
             report=dict(version=native_worker.VERSION,python=platform.python_version(),platform=platform.platform(),
                         dataset=dict(tasks=args.tasks,checklist_items=len(checks),attachments=0 if args.light else args.tasks,synthetic=True),
-                        timings_include='Worker.dispatch plus UTF-8 JSON serialization; fixture generation excluded',
+                        timings_include='Worker.execute plus UTF-8 JSON serialization; fixture generation excluded',
                         observations=observations,interactive_targets_ms=dict(search=150,page_100=250,save=300),
                         ci_regression_ceilings_ms=ceilings,ceiling_failures=failures,passed=not failures)
             args.report.parent.mkdir(parents=True,exist_ok=True)

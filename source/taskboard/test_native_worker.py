@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 
 class NativeWorkerTests(unittest.TestCase):
     def setUp(self):
@@ -40,6 +41,16 @@ class NativeWorkerTests(unittest.TestCase):
         self.call('action',id=first,action='move',status='完成');done=self.call('action',id=second,action='move',status='完成')
         self.assertEqual(len(done['state']['tasks']),3);self.call('undo',key=done['undo']);self.assertEqual(len(self.call('state')['tasks']),2)
         result=self.call('bulk',ids=[first,second],changes=dict(priority=1,due='2027-01-01'));self.assertEqual(result['result']['failed'],[])
+    def test_tracked_task_changes_return_only_incremental_patch(self):
+        self.login()
+        for i in range(100):self.call('save',title=f'任务{i}',status='计划中')
+        token=self.call('task-get',id=100)['task']['updated_at']
+        self.counter+=1;operation=uuid.uuid4().hex
+        self.process.stdin.write(json.dumps(dict(id=self.counter,method='save',operation_id=operation,params=dict(id=100,updated_at=token,title='增量修改',status='计划中'))) +'\n');self.process.stdin.flush()
+        reply=json.loads(self.process.stdout.readline());self.assertNotIn('error',reply)
+        patch=reply['result']['patch'];self.assertEqual([task['id'] for task in patch['tasks']],[100]);self.assertEqual(len(patch['trash']),0);self.assertNotIn('state',reply['result'])
+        self.counter+=1;self.process.stdin.write(json.dumps(dict(id=self.counter,method='action',operation_id=uuid.uuid4().hex,params=dict(id=100,action='trash'))) +'\n');self.process.stdin.flush()
+        reply=json.loads(self.process.stdout.readline());self.assertEqual([task['id'] for task in reply['result']['patch']['trash']],[100]);self.assertEqual(reply['result']['patch']['removed_ids'],[])
     def test_backup_preview_restore_and_privacy(self):
         self.login();self.call('save',title='Private title',note='Private note',status='计划中')
         backup=self.root/'backup.zip';self.call('export',format='zip',path=str(backup));info=self.call('preview',path=str(backup));self.assertEqual(info['tasks'],1)

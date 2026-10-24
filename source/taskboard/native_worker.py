@@ -76,8 +76,26 @@ class Worker:
             self.db.execute('INSERT INTO native_operations VALUES (?,?,?,?,?,?)',(operation_id,method,digest,'pending',None,s.now()))
         payload=copy.deepcopy(item)
         if method=='save': payload['_operation_id']=operation_id
+        compact = method in {'save','action','bulk'}
+        before_max = self.db.execute('SELECT COALESCE(MAX(id),0) FROM tasks').fetchone()[0] if compact else 0
+        requested = set()
+        if method=='save' and item.get('id'): requested.add(int(item['id']))
+        elif method=='action' and item.get('id'): requested.add(int(item['id']))
+        elif method=='bulk': requested.update(map(int,item.get('ids',[])))
+        if compact: payload['_compact_response']=True
         try:
             result=self.dispatch(method,payload)
+            if compact:
+                requested.update(int(r[0]) for r in self.db.execute('SELECT id FROM tasks WHERE id>?',(before_max,)))
+                # A prerequisite transition can change the blocked badge on dependent cards.
+                if requested:
+                    marks=','.join('?' for _ in requested)
+                    requested.update(int(r[0]) for r in self.db.execute(f'SELECT task_id FROM task_dependencies WHERE prerequisite IN ({marks})',tuple(requested)))
+                partial=domain.snapshot(self.db,sorted(requested))
+                patch={k:partial[k] for k in ('tasks','trash','archived')}
+                patch['removed_ids']=[tid for tid in requested if not any(t['id']==tid for group in ('tasks','trash','archived') for t in partial[group])]
+                result.pop('state',None)
+                result['patch']=patch
             small={k:v for k,v in result.items() if k!='state'}
             with self.db:self.db.execute("UPDATE native_operations SET status='done',result=? WHERE id=?",(json.dumps(small,ensure_ascii=False),operation_id))
             return result
@@ -202,6 +220,7 @@ class Worker:
             return result
         if method == 'save':
             item=dict(item)
+            compact=bool(item.pop('_compact_response',False))
             item.pop('_trusted_history',None)
             for file in item.get('new_files',[]):file.pop('history_version',None)
             # Native attachments use selected local paths, then the same atomic
@@ -224,8 +243,9 @@ class Worker:
             item['new_files'] = files
             tid = domain.save_draft(db, item)
             if item.get('draft_key'): f.save_draft(db, dict(key=item['draft_key'], action='delete'))
-            return dict(state=self.state(), id=tid)
+            return dict(id=tid) if compact else dict(state=self.state(), id=tid)
         if method == 'action':
+            compact=bool(item.pop('_compact_response',False))
             tid = int(item['id']); action = item['action']
             before = f.undo_record(db, tid) if action in ('move', 'trash', 'archive') else None
             if action == 'move':
@@ -241,7 +261,8 @@ class Worker:
             else: raise ValueError('操作无效')
             if action not in ('erase','duplicate'):
                 with db: recovery.history_record(db,tid,'任务操作：'+action)
-            return dict(state=self.state(), undo=f.make_undo(db, before) if before else None)
+            result=dict(undo=f.make_undo(db, before) if before else None)
+            return result if compact else dict(state=self.state(), **result)
         if method == 'undo': f.undo(db, item['key'])
         elif method == 'tag':
             action = item['action']
@@ -252,8 +273,10 @@ class Worker:
             else: raise ValueError('标签操作无效')
         elif method == 'view': f.save_view(db, item)
         elif method == 'bulk':
+            compact=bool(item.pop('_compact_response',False))
             result = dict(ok=[], failed=[])
-            available={t['id']:t for t in self.state()['tasks']}
+            partial=domain.snapshot(db,item['ids'])
+            available={t['id']:t for group in ('tasks','archived','trash') for t in partial[group]}
             for tid in item['ids']:
                 try:
                     task = copy.deepcopy(available[tid])
@@ -264,7 +287,7 @@ class Worker:
                     if 'priority' in changes: payload['options'] = dict(task['options'], priority=changes['priority'])
                     domain.save_draft(db, payload); result['ok'].append(tid)
                 except (ValueError, KeyError, StopIteration) as exc: result['failed'].append(dict(id=tid, error=str(exc)))
-            return dict(state=self.state(), result=result)
+            return dict(result=result) if compact else dict(state=self.state(), result=result)
         elif method == 'reminders': return dict(reminders=f.reminders(db))
         elif method == 'reminder': f.acknowledge(db, item); return {}
         elif method == 'drafts': return dict(drafts=[dict(id=r['id'], updated=r['updated'], title=json.loads(r['data']).get('title', '')) for r in db.execute('SELECT * FROM drafts ORDER BY updated DESC')])
