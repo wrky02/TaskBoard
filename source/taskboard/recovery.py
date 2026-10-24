@@ -43,7 +43,10 @@ def _sync_directory(path):
 
 def _replace_with_retry(source, destination):
     """Retry transient Windows sharing violations during an atomic generation swap."""
-    deadline = time.monotonic() + 3.0
+    # Windows Defender and search indexing can hold a just-written SQLite
+    # file longer than a normal rename. Keep the UI's recovery operation alive
+    # through those scans, then report the process holding the handle.
+    deadline = time.monotonic() + 15.0
     delay = 0.025
     while True:
         try:
