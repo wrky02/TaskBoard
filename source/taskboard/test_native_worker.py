@@ -45,6 +45,23 @@ class NativeWorkerTests(unittest.TestCase):
         backup=self.root/'backup.zip';self.call('export',format='zip',path=str(backup));info=self.call('preview',path=str(backup));self.assertEqual(info['tasks'],1)
         self.call('save',title='Extra',status='计划中');result=self.call('restore');self.assertEqual(len(result['state']['tasks']),1);self.assertTrue(Path(result['safety']).is_file())
         dest=self.root/'diagnostics.json';report=self.call('diagnostics',path=str(dest));self.assertFalse(report['browser']);self.assertNotIn('Private',dest.read_text());self.assertNotIn(str(self.root),dest.read_text())
+    def test_encrypted_workspace_password_and_recovery_unlock(self):
+        self.assertTrue(self.call('status')['first'])
+        self.login()
+        self.call('save',title='加密后仍可读取',status='计划中')
+        enabled=self.call('vault-enable',password='native-test-password')
+        self.assertTrue(enabled['enabled']);key=enabled['recovery_key']
+        self.assertTrue(enabled['state']['vault']['enabled'])
+        self.call('lock');self.stop();self.start()
+        self.assertTrue(self.call('status')['encrypted'])
+        with self.assertRaisesRegex(ValueError,'密码或恢复密钥错误'):
+            self.call('login',password='wrong-password')
+        state=self.call('vault-recover',recovery_key=key,new_password='recovered-password',confirm='recovered-password')
+        self.assertEqual(state['tasks'][0]['title'],'加密后仍可读取')
+        self.call('lock');self.stop();self.start()
+        state=self.call('login',password='recovered-password')
+        self.assertEqual(state['tasks'][0]['title'],'加密后仍可读取')
+
     def test_rejects_second_worker_and_releases_lock_on_eof(self):
         self.login();other=subprocess.run([sys.executable,str(Path(__file__).with_name('native_worker.py')),'--data-root',str(self.root/'Data')],input='',capture_output=True,text=True,encoding='utf-8',timeout=15)
         self.assertEqual(other.returncode,1);self.assertIn('另一个',json.loads(other.stdout)['error'])

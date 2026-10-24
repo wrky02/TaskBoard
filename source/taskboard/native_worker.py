@@ -122,6 +122,7 @@ class Worker:
                     password=str(item.get('new_password',''))
                     if len(password)<8:raise ValueError('密码至少 8 位')
                     vault.recover_password(self.root,item['recovery_key'],password)
+                    vault.unlock(self.root,password=password)
                     if self.db is None:self.open_database()
                     s.set_password(self.db,password)
                 elif vault.is_enabled(self.root):
