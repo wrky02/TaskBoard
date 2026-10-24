@@ -65,9 +65,9 @@ def editor():
     return mainwindow()
 def editor_closed():
     return not mainwindow().child_window(auto_id='editorTitle').exists(timeout=.2)
-def message_button(button_id):
+def message_button(button_id, timeout=15):
     message=Desktop(backend='win32').window(process=process.pid,class_name='#32770')
-    message.wait('visible',timeout=15)
+    message.wait('visible',timeout=timeout)
     # Win32 IDYES=6 is stable across runner display languages.
     handle=message.handle
     buttons=message.children(class_name='Button')
@@ -189,7 +189,7 @@ try:
     click(center,'createRecoveryPoint');until(lambda:list(recovery_target.glob('*.zip')),timeout=60);close_window(center)
     text(win,'quickTitle','Restore rollback candidate');control(win,'quickTitle').type_keys('{ENTER}');until(lambda:db_scalar('SELECT COUNT(*) FROM tasks')==4)
     click(win,'recoveryCenter');center=dialog('恢复中心');control(center,'previewRecovery')
-    pending=modal_click(center,'previewRecovery');message_choice();message_button(1);modal_done(pending)
+    pending=modal_click(center,'previewRecovery');message_choice();message_button(1,timeout=60);modal_done(pending)
     deadline=time.monotonic()+60
     while time.monotonic()<deadline:
         restored_count=db_scalar('SELECT COUNT(*) FROM tasks')
