@@ -59,11 +59,12 @@ def close_window(win):
     win32gui.PostMessage(handle,win32con.WM_CLOSE,0,0)
     until(lambda:not win32gui.IsWindow(handle))
 def editor():
-    win=mainwindow()
-    control(win,'editorPane')
-    return win.child_window(auto_id='editorPane')
+    # The pane's root is a layout container, which some Windows UIA versions
+    # omit from the control view. Its actual editable controls remain children
+    # of the main window and have stable automation IDs of their own.
+    return mainwindow()
 def editor_closed():
-    return not mainwindow().child_window(auto_id='editorPane').exists(timeout=.2)
+    return not mainwindow().child_window(auto_id='editorTitle').exists(timeout=.2)
 def message_button(button_id):
     message=Desktop(backend='win32').window(process=process.pid,class_name='#32770')
     message.wait('visible',timeout=15)

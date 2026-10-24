@@ -101,7 +101,7 @@ try:
     # UIA menu nesting differs between Windows builds; locate by descendants.
     today=until(lambda:next((x for w in Desktop(backend='uia').windows(process=process.pid) for x in w.descendants(control_type='MenuItem') if x.window_text()=='移出今日计划'),None))
     capture(win,'task-menu');today.invoke();control(win,'task-1')
-    control(win,'task-1').invoke();control(win,'editorPane');edit=win.child_window(auto_id='editorPane');capture(win,'task-editor')
+    control(win,'task-1').invoke();control(win,'editorTitle');edit=win;capture(win,'task-editor')
     control(edit,'editorDue');edit.child_window(auto_id='editorDue').child_window(auto_id='PART_Button',control_type='Button').invoke()
     def popup_control(id):
         return until(lambda:next((c for w in Desktop(backend='uia').windows(process=process.pid) for c in w.descendants() if c.element_info.automation_id==id),None))
@@ -112,7 +112,7 @@ try:
     capture(win,'date-picker')
     # Close popup without changing selected date.
     edit.child_window(auto_id='editorDue').child_window(auto_id='PART_Button',control_type='Button').invoke()
-    control(edit,'closeEditor').invoke();until(lambda:not win.child_window(auto_id='editorPane').exists(timeout=.2))
+    control(edit,'closeEditor').invoke();until(lambda:not win.child_window(auto_id='editorTitle').exists(timeout=.2))
     # Verify navigation selection and an empty filtered state.
     control(win,'nav我的今天').invoke();capture(win,'my-day')
     control(win,'nav看板').invoke();control(win,'search').set_edit_text('no-matching-demo-task');capture(win,'empty-search');control(win,'search').set_edit_text('')
