@@ -69,8 +69,11 @@ def message_button(button_id):
     message=Desktop(backend='win32').window(process=process.pid,class_name='#32770')
     message.wait('visible',timeout=15)
     # Win32 IDYES=6 is stable across runner display languages.
-    message.child_window(control_id=button_id).click()
-    until(lambda:not message.exists(timeout=.2))
+    handle=message.handle;button=message.child_window(control_id=button_id).wrapper_object()
+    win32gui.SendMessage(button.handle,win32con.BM_CLICK,0,0)
+    # A follow-up MessageBox can reuse the same title/class, so wait for this
+    # exact HWND to close instead of querying the selector again.
+    until(lambda:not win32gui.IsWindow(handle))
 def message_choice(yes=True):message_button(6 if yes else 7)
 def record(name):
     completed.append(name);print('PASS '+name,flush=True)
