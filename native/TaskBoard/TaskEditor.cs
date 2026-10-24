@@ -31,6 +31,7 @@ internal sealed partial class TaskEditor : Window
     readonly TextBlock saveState=Ui.Text("编辑内容独立保存为草稿；点击保存后才正式生效",12,Ui.Muted);
     readonly ProgressBar progress=new(){Height=5,Minimum=0,Maximum=100,Visibility=Visibility.Collapsed};
     readonly DockPanel editorRoot=new(){Margin=new Thickness(22,18,22,16)};
+    readonly ContentControl editorPane=new();
     string lastDraft="",initial="";
     bool finished,savingDraft,loading=true,busy,readOnly,composing,paneMode,closingWindow;
     Action? paneClosed;
@@ -59,6 +60,7 @@ internal sealed partial class TaskEditor : Window
         for(int i=0;i<3;i++){var field=Ui.Column(Ui.Text(labels[i],11,Ui.Muted),fieldControls[i]);Grid.SetColumn(field,i);fields.Children.Add(field);}
         var shortcuts=Ui.Row();foreach(var (label,days) in new[]{("今天",0),("明天",1),("一周后",7)}){var button=Ui.Quiet(label,()=>{due.SelectedDate=DateTime.Today.AddDays(days);return Task.CompletedTask;});button.MinHeight=28;button.Padding=new Thickness(10,3,10,3);button.Foreground=Ui.Purple;shortcuts.Children.Add(button);}var clear=Ui.Quiet("清除日期",()=>{due.SelectedDate=null;return Task.CompletedTask;});clear.MinHeight=28;clear.Padding=new Thickness(10,3,10,3);shortcuts.Children.Add(clear);
         System.Windows.Automation.AutomationProperties.SetAutomationId(editorRoot,"editorPane");
+        System.Windows.Automation.AutomationProperties.SetAutomationId(editorPane,"editorPane");System.Windows.Automation.AutomationProperties.SetName(editorPane,"任务详情编辑面板");
         var top=Ui.Column(Ui.Row(Ui.Chip(task is null?"NEW TASK":"TASK / "+task.I("id"),Ui.Purple),Ui.Text(task is null?"记录新的想法与安排":"任务详情",12,Ui.Muted)),title,fields,shortcuts,today);top.Margin=new Thickness(0,0,0,10);
         var tagPanel=Ui.Row();var tagIds=value.A("tags").Select(x=>x is JsonObject?x.I("id"):int.Parse(x!.ToString())).ToHashSet();
         foreach(var tag in owner.State.A("tags")){int id=tag.I("id");var check=Ui.Check(tag.S("name"),tagIds.Contains(id));tags.Add((check,id));tagPanel.Children.Add(check);}
@@ -90,7 +92,7 @@ internal sealed partial class TaskEditor : Window
     internal FrameworkElement DetachContentForPane(Action closed)
     {
         if(IsLoaded)throw new InvalidOperationException("已打开的窗口无法移入详情面板。");
-        paneMode=true;paneClosed=closed;Content=null;editorRoot.Loaded+=(_,_)=>title.Focus();return editorRoot;
+        paneMode=true;paneClosed=closed;Content=null;editorPane.Content=editorRoot;editorRoot.Loaded+=(_,_)=>title.Focus();return editorPane;
     }
     internal async Task RequestClosePaneAsync()
     {
