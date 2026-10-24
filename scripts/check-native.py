@@ -69,7 +69,13 @@ def message_button(button_id):
     message=Desktop(backend='win32').window(process=process.pid,class_name='#32770')
     message.wait('visible',timeout=15)
     # Win32 IDYES=6 is stable across runner display languages.
-    handle=message.handle;button=message.child_window(control_id=button_id).wrapper_object()
+    handle=message.handle
+    try:button=message.child_window(control_id=button_id).wrapper_object()
+    except Exception:
+        buttons=message.children(class_name='Button')
+        print('::notice title=Native modal buttons::'+repr([(b.control_id(),b.window_text()) for b in buttons]),flush=True)
+        if not buttons:raise AssertionError('Native modal contains no actionable buttons')
+        button=buttons[0]
     win32gui.SendMessage(button.handle,win32con.BM_CLICK,0,0)
     # A follow-up MessageBox can reuse the same title/class, so wait for this
     # exact HWND to close instead of querying the selector again.
