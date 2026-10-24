@@ -172,6 +172,7 @@ try:
     assert db_scalar('SELECT COUNT(*) FROM tasks')==3;record('restore an individual task version')
     # Create a verified recovery point, add a task, preview and restore the point.
     recovery_target=root.parent/'native-qa-backups'
+    recovery_target.mkdir(parents=True,exist_ok=True)
     click(win,'recoveryCenter');center=dialog('恢复中心');text(center,'recoveryTarget',str(recovery_target));click(center,'saveRecoveryConfig');control(center,'saveRecoveryConfig')
     click(center,'createRecoveryPoint');until(lambda:list(recovery_target.glob('*.zip')),timeout=60);close_window(center)
     text(win,'quickTitle','Restore rollback candidate');control(win,'quickTitle').type_keys('{ENTER}');until(lambda:db_scalar('SELECT COUNT(*) FROM tasks')==4)
