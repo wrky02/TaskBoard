@@ -467,10 +467,31 @@ def _path_instance(path) -> tuple[Path, Vault | None, str | None]:
     with _guard:
         roots = sorted(_sessions, key=lambda x: len(x.parts), reverse=True)
         for root in roots:
-            if nominal.is_relative_to(root) and not path.is_relative_to(root):
-                raise ValueError('加密工作区文件不能通过链接指向工作区之外')
-            if path.is_relative_to(root):
+            try:
+                relative = nominal.relative_to(root)
+            except ValueError:
+                relative = None
+            if relative is not None:
+                # Resolve lexical components only after detecting links. Windows
+                # treats junctions as directory-like entries, and relying only
+                # on the final resolved path can miss an intermediate reparse
+                # point on some Python/filesystem combinations.
+                current = root
+                for part in relative.parts:
+                    current = current / part
+                    is_junction = getattr(current, 'is_junction', lambda: False)
+                    if current.is_symlink() or is_junction():
+                        raise ValueError('加密工作区文件不能通过链接指向其他位置')
+                try:
+                    path.relative_to(root)
+                except ValueError:
+                    raise ValueError('加密工作区文件不能通过链接指向工作区之外') from None
                 return path, _sessions[root], path.relative_to(root).as_posix()
+            try:
+                path.relative_to(root)
+            except ValueError:
+                continue
+            return path, _sessions[root], path.relative_to(root).as_posix()
     for parent in path.parents:
         if is_enabled(parent):
             raise VaultLocked('加密工作区已锁定')
