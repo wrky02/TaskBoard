@@ -187,7 +187,15 @@ try:
     text(win,'quickTitle','Restore rollback candidate');control(win,'quickTitle').type_keys('{ENTER}');until(lambda:db_scalar('SELECT COUNT(*) FROM tasks')==4)
     click(win,'recoveryCenter');center=dialog('恢复中心');control(center,'previewRecovery')
     pending=modal_click(center,'previewRecovery');message_choice();message_button(1);modal_done(pending)
-    until(lambda:db_scalar('SELECT COUNT(*) FROM tasks')==3);assert db_scalar("SELECT COUNT(*) FROM tasks WHERE title='Restore rollback candidate'")==0
+    deadline=time.monotonic()+60
+    while time.monotonic()<deadline:
+        restored_count=db_scalar('SELECT COUNT(*) FROM tasks')
+        if restored_count==3:break
+        time.sleep(.25)
+    if restored_count!=3:
+        with sqlite3.connect(root/'tasks.sqlite3') as db:titles=[row[0] for row in db.execute('SELECT title FROM tasks ORDER BY id')]
+        raise AssertionError(f'Backup restore left {restored_count} tasks; expected 3. Titles: {titles!r}')
+    assert db_scalar("SELECT COUNT(*) FROM tasks WHERE title='Restore rollback candidate'")==0
     close_window(center);record('create, preview and restore a verified recovery point')
     # Real installed icon and WPF class, not Edge app mode.
     assert 'HwndWrapper' in Desktop(backend='win32').window(handle=win.handle).class_name()
